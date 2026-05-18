@@ -3,152 +3,413 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shorts Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Content Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
-  :root {
-    --bg:#0e0e10;--surface:#18181b;--surface2:#222226;
-    --border:rgba(255,255,255,0.07);--text:#f0f0f0;--muted:#888;
-    --accent:#ff4d4d;--green:#4ade80;--blue:#60a5fa;
-    --purple:#a78bfa;--yellow:#fbbf24;--orange:#ff8c42;
-    --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;}
+:root {
+  --bg:#0a0a0c;--surface:#131316;--surface2:#1c1c21;--surface3:#242429;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --text:#f0f0f0;--muted:#666;--muted2:#999;
+  --yt:#ff4d4d;--ig:#e1306c;--tt:#00f2ea;
+  --green:#4ade80;--blue:#60a5fa;--purple:#a78bfa;--yellow:#fbbf24;--orange:#fb923c;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --radius:14px;--radius-sm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;}
 
-  #signinView{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
-  #signinView::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(255,77,77,0.12) 0%,transparent 70%);top:-100px;left:-100px;pointer-events:none;}
-  #signinView::after{content:'';position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(96,165,250,0.08) 0%,transparent 70%);bottom:-50px;right:-50px;pointer-events:none;}
-  .signin-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3rem;text-align:center;width:460px;position:relative;z-index:1;}
-  .logo{width:52px;height:52px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:24px;}
-  .signin-card h1{font-size:24px;font-weight:600;margin-bottom:8px;}
-  .signin-card p{color:var(--muted);font-size:14px;margin-bottom:1.5rem;line-height:1.6;}
-  .api-input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px;margin-bottom:10px;outline:none;}
-  .api-input:focus{border-color:rgba(255,255,255,0.2);}
-  .btn-load{width:100%;padding:14px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:var(--font);font-size:15px;font-weight:500;cursor:pointer;transition:opacity 0.2s,transform 0.1s;}
-  .btn-load:hover{opacity:0.9;transform:translateY(-1px);}
-  .hint{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5;}
-  .error-box{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);border-radius:10px;padding:12px;font-size:13px;color:#ff8a8a;margin-top:1rem;display:none;}
+/* LAYOUT */
+.app{display:flex;min-height:100vh;}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);padding:1.5rem 1rem;display:flex;flex-direction:column;gap:4px;position:fixed;top:0;left:0;height:100vh;z-index:200;}
+.main-area{margin-left:220px;flex:1;min-height:100vh;}
+.topbar{padding:1rem 2rem;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.content{padding:2rem;max-width:1200px;}
 
-  #dashboardView{display:none;}
-  .topbar{padding:1rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:100;}
-  .topbar-left{display:flex;align-items:center;gap:12px;}
-  .topbar-logo{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
-  .channel-name{font-size:15px;font-weight:500;}
-  .topbar-right{display:flex;align-items:center;gap:10px;}
-  .last-updated{font-size:12px;color:var(--muted);font-family:var(--mono);}
-  .btn-sm{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:13px;cursor:pointer;transition:background 0.15s;}
-  .btn-sm:hover{background:#2a2a2e;}
+/* SIDEBAR */
+.sidebar-logo{display:flex;align-items:center;gap:10px;padding:0.5rem;margin-bottom:1.5rem;}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--yt),var(--ig));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.logo-text{font-size:15px;font-weight:600;}
+.nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;padding:0.5rem;margin-top:1rem;margin-bottom:4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);font-size:14px;cursor:pointer;color:var(--muted2);transition:all 0.15s;border:none;background:none;width:100%;text-align:left;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--surface2);color:var(--text);font-weight:500;}
+.nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-all{background:linear-gradient(135deg,var(--yt),var(--ig));}
+.dot-yt{background:var(--yt);}
+.dot-ig{background:var(--ig);}
+.dot-tt{background:var(--tt);}
+.sidebar-bottom{margin-top:auto;padding-top:1rem;border-top:1px solid var(--border);}
 
-  .main{padding:2rem;max-width:1100px;margin:0 auto;}
-  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:2rem;}
-  .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem;transition:border-color 0.2s;}
-  .metric-card:hover{border-color:rgba(255,255,255,0.15);}
-  .metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
-  .metric-value{font-size:26px;font-weight:600;font-family:var(--mono);}
-  .c-accent{color:var(--accent);}.c-green{color:var(--green);}.c-blue{color:var(--blue);}.c-purple{color:var(--purple);}.c-yellow{color:var(--yellow);}
+/* TOPBAR */
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.last-updated{font-size:12px;color:var(--muted);font-family:var(--mono);}
+.btn{padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:13px;cursor:pointer;transition:background 0.15s;}
+.btn:hover{background:var(--surface3);}
+.btn-primary{background:var(--yt);border-color:var(--yt);color:white;}
+.btn-primary:hover{opacity:0.9;}
+.btn-ig{background:var(--ig);border-color:var(--ig);color:white;}
+.btn-tt{background:var(--tt);border-color:var(--tt);color:#000;}
 
-  .tabs{display:flex;gap:4px;margin-bottom:1.5rem;background:var(--surface);border-radius:10px;padding:4px;width:fit-content;}
-  .tab{padding:7px 18px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--muted);transition:all 0.15s;}
-  .tab.active{background:var(--surface2);color:var(--text);font-weight:500;}
-  .tab:hover:not(.active){color:var(--text);}
+/* METRICS */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem;}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;transition:border-color 0.2s;}
+.metric-card:hover{border-color:var(--border2);}
+.metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+.metric-value{font-size:28px;font-weight:600;font-family:var(--mono);line-height:1;}
+.metric-sub{font-size:12px;color:var(--muted);margin-top:6px;}
+.c-yt{color:var(--yt);}.c-ig{color:var(--ig);}.c-tt{color:var(--tt);}
+.c-green{color:var(--green);}.c-blue{color:var(--blue);}.c-purple{color:var(--purple);}.c-yellow{color:var(--yellow);}
 
-  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;margin-bottom:1rem;}
-  .chart-label{font-size:12px;color:var(--muted);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.05em;}
-  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
-  @media(max-width:640px){.two-col{grid-template-columns:1fr;}}
+/* PLATFORM BADGES */
+.platform-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:500;display:inline-block;}
+.pb-yt{background:rgba(255,77,77,0.15);color:var(--yt);}
+.pb-ig{background:rgba(225,48,108,0.15);color:var(--ig);}
+.pb-tt{background:rgba(0,242,234,0.15);color:var(--tt);}
 
-  .video-table{width:100%;border-collapse:collapse;font-size:13px;}
-  .video-table th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);}
-  .video-table td{padding:12px;border-bottom:1px solid var(--border);color:var(--text);}
-  .video-table tr:last-child td{border-bottom:none;}
-  .video-table tr:hover td{background:var(--surface2);}
-  .video-table a{color:var(--text);text-decoration:none;}
-  .video-table a:hover{color:var(--accent);}
-  .badge{font-size:11px;padding:3px 9px;border-radius:99px;font-family:var(--mono);font-weight:500;}
-  .bg{background:rgba(74,222,128,0.12);color:var(--green);}
-  .ba{background:rgba(251,191,36,0.12);color:var(--yellow);}
-  .br{background:rgba(255,77,77,0.12);color:var(--accent);}
+/* SORT/FILTER BAR */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;}
+.filter-label{font-size:12px;color:var(--muted);margin-right:4px;}
+.filter-btn{padding:5px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted2);font-size:12px;cursor:pointer;transition:all 0.15s;font-family:var(--font);}
+.filter-btn:hover{border-color:var(--border2);color:var(--text);}
+.filter-btn.active{background:var(--surface2);border-color:var(--border2);color:var(--text);font-weight:500;}
+.sort-select{padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-family:var(--font);cursor:pointer;outline:none;}
 
-  #loadingView{min-height:100vh;display:none;align-items:center;justify-content:center;flex-direction:column;gap:1rem;}
-  .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
-  @keyframes spin{to{transform:rotate(360deg);}}
-  .loading-text{color:var(--muted);font-size:14px;}
+/* CHARTS */
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem;}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;}
+.chart-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+@media(max-width:700px){.two-col{grid-template-columns:1fr;}}
+
+/* TABLE */
+.video-table{width:100%;border-collapse:collapse;font-size:13px;}
+.video-table th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;}
+.video-table th:hover{color:var(--text);}
+.video-table th .sort-arrow{margin-left:4px;opacity:0.4;}
+.video-table th.sorted .sort-arrow{opacity:1;}
+.video-table td{padding:12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+.video-table tr:last-child td{border-bottom:none;}
+.video-table tr:hover td{background:var(--surface2);}
+.video-table a{color:var(--text);text-decoration:none;}
+.video-table a:hover{color:var(--yt);}
+.eng-badge{font-size:11px;padding:3px 9px;border-radius:99px;font-family:var(--mono);font-weight:500;}
+.eg{background:rgba(74,222,128,0.12);color:var(--green);}
+.ea{background:rgba(251,191,36,0.12);color:var(--yellow);}
+.er{background:rgba(255,77,77,0.12);color:var(--yt);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:2rem;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;}
+.modal h2{font-size:18px;font-weight:600;margin-bottom:6px;}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:1.5rem;line-height:1.5;}
+.form-group{margin-bottom:1rem;}
+.form-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;display:block;}
+.form-input{width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:14px;outline:none;transition:border-color 0.15s;}
+.form-input:focus{border-color:rgba(255,255,255,0.3);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.modal-actions{display:flex;gap:8px;margin-top:1.5rem;justify-content:flex-end;}
+.divider{height:1px;background:var(--border);margin:1.5rem 0;}
+.video-list-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.video-list-item:last-child{border-bottom:none;}
+.del-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;}
+.del-btn:hover{background:rgba(255,77,77,0.1);color:var(--yt);}
+
+/* SETUP */
+#setupView{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+#setupView::before{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(255,77,77,0.08) 0%,transparent 70%);top:-200px;left:-200px;pointer-events:none;}
+.setup-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:3rem;width:500px;max-width:95vw;position:relative;z-index:1;}
+.setup-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--yt),var(--ig));border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:26px;}
+.setup-card h1{font-size:26px;font-weight:600;text-align:center;margin-bottom:8px;}
+.setup-card>p{color:var(--muted);font-size:14px;text-align:center;margin-bottom:2rem;line-height:1.6;}
+.api-input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px;margin-bottom:10px;outline:none;}
+.api-input:focus{border-color:rgba(255,255,255,0.25);}
+.btn-load{width:100%;padding:14px;border-radius:12px;border:none;background:var(--yt);color:white;font-family:var(--font);font-size:15px;font-weight:500;cursor:pointer;transition:opacity 0.2s,transform 0.1s;}
+.btn-load:hover{opacity:0.9;transform:translateY(-1px);}
+.hint{font-size:12px;color:var(--muted);margin-top:10px;text-align:center;line-height:1.5;}
+.error-box{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);border-radius:10px;padding:12px;font-size:13px;color:#ff8a8a;margin-top:1rem;display:none;}
+
+/* LOADING */
+#loadingView{min-height:100vh;display:none;align-items:center;justify-content:center;flex-direction:column;gap:1rem;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--yt);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{color:var(--muted);font-size:14px;}
+
+/* TABS */
+.page-tabs{display:flex;gap:4px;margin-bottom:1.5rem;background:var(--surface);border-radius:10px;padding:4px;width:fit-content;}
+.page-tab{padding:7px 18px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--muted);transition:all 0.15s;}
+.page-tab.active{background:var(--surface2);color:var(--text);font-weight:500;}
+.page-tab:hover:not(.active){color:var(--text);}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:3rem;color:var(--muted);font-size:14px;}
+.empty-state .empty-icon{font-size:36px;margin-bottom:1rem;}
+
+/* COMPARE BARS */
+.compare-bar-wrap{margin-bottom:6px;}
+.compare-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;}
+.compare-bar{height:6px;border-radius:99px;background:var(--surface2);overflow:hidden;}
+.compare-fill{height:100%;border-radius:99px;transition:width 0.6s ease;}
 </style>
 </head>
 <body>
 
-<div id="signinView">
-  <div class="signin-card">
-    <div class="logo">▶</div>
-    <h1>Shorts Dashboard</h1>
-    <p>Enter your YouTube Data API v3 key to instantly load your channel's Shorts analytics.</p>
-    <input class="api-input" type="password" id="apiKeyInput" placeholder="Paste your API key here..." autocomplete="off" onkeydown="if(event.key==='Enter')loadData()"/>
-    <button class="btn-load" onclick="loadData()">Load my Shorts →</button>
-    <p class="hint">Your key is saved in your browser only — never sent anywhere else.<br>Get a free key at console.cloud.google.com</p>
-    <div class="error-box" id="authError"></div>
+<!-- SETUP -->
+<div id="setupView">
+  <div class="setup-card">
+    <div class="setup-logo">📊</div>
+    <h1>Content Dashboard</h1>
+    <p>Connect your YouTube channel to get started. You can add Instagram and TikTok data manually after.</p>
+    <input class="api-input" type="password" id="apiKeyInput" placeholder="YouTube Data API v3 key..." autocomplete="off" onkeydown="if(event.key==='Enter')setup()"/>
+    <button class="btn-load" onclick="setup()">Connect YouTube →</button>
+    <p class="hint">API key stored in your browser only. Get one free at console.cloud.google.com<br>Don't have YouTube Shorts yet? <span style="color:var(--text);cursor:pointer;text-decoration:underline;" onclick="skipSetup()">Skip and add Instagram/TikTok only</span></p>
+    <div class="error-box" id="setupError"></div>
   </div>
 </div>
 
+<!-- LOADING -->
 <div id="loadingView">
   <div class="spinner"></div>
-  <div class="loading-text" id="loadingText">Fetching your Shorts data...</div>
+  <div class="loading-text" id="loadingText">Connecting to YouTube...</div>
 </div>
 
-<div id="dashboardView">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div class="topbar-logo">▶</div>
-      <span class="channel-name" id="channelName">Shorts Dashboard</span>
+<!-- MAIN APP -->
+<div id="appView" style="display:none;">
+  <div class="app">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">📊</div>
+        <span class="logo-text">Dashboard</span>
+      </div>
+
+      <div class="nav-section">Platforms</div>
+      <button class="nav-item active" onclick="setFilter('all',this)"><span class="nav-dot dot-all"></span> All platforms</button>
+      <button class="nav-item" onclick="setFilter('youtube',this)"><span class="nav-dot dot-yt"></span> YouTube Shorts</button>
+      <button class="nav-item" onclick="setFilter('instagram',this)"><span class="nav-dot dot-ig"></span> Instagram Reels</button>
+      <button class="nav-item" onclick="setFilter('tiktok',this)"><span class="nav-dot dot-tt"></span> TikTok</button>
+
+      <div class="nav-section">Views</div>
+      <button class="nav-item" onclick="showPage('overview')">📈 Overview</button>
+      <button class="nav-item" onclick="showPage('compare')">⚖️ Compare</button>
+      <button class="nav-item" onclick="showPage('growth')">📅 Growth</button>
+      <button class="nav-item" onclick="showPage('videos')">🎬 All videos</button>
+
+      <div class="sidebar-bottom">
+        <button class="nav-item" onclick="openModal('ig')">➕ Add Reel</button>
+        <button class="nav-item" onclick="openModal('tt')">➕ Add TikTok</button>
+        <button class="nav-item" onclick="refreshYT()">↻ Refresh YouTube</button>
+        <button class="nav-item" onclick="logout()" style="margin-top:4px;">⎋ Sign out</button>
+      </div>
     </div>
-    <div class="topbar-right">
-      <span class="last-updated" id="lastUpdated"></span>
-      <button class="btn-sm" onclick="fetchAndRender()">↻ Refresh</button>
-      <button class="btn-sm" onclick="logout()">Sign out</button>
+
+    <!-- MAIN -->
+    <div class="main-area">
+      <div class="topbar">
+        <span class="topbar-title" id="topbarTitle">All Platforms</span>
+        <div class="topbar-right">
+          <span class="last-updated" id="lastUpdated"></span>
+          <button class="btn btn-ig" onclick="openModal('ig')">+ Add Reel</button>
+          <button class="btn btn-tt" onclick="openModal('tt')">+ Add TikTok</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- OVERVIEW PAGE -->
+        <div id="page-overview">
+          <div class="metric-grid" id="metricGrid"></div>
+          <div class="chart-card">
+            <div class="chart-header">
+              <div class="chart-label">Views per video</div>
+            </div>
+            <div style="position:relative;height:260px;"><canvas id="viewsChart"></canvas></div>
+          </div>
+          <div class="two-col">
+            <div class="chart-card">
+              <div class="chart-label">Likes per video</div>
+              <div style="position:relative;height:200px;"><canvas id="likesChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-label">Engagement rate per video</div>
+              <div style="position:relative;height:200px;"><canvas id="engChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPARE PAGE -->
+        <div id="page-compare" style="display:none;">
+          <div class="two-col" style="margin-bottom:1rem;">
+            <div class="chart-card">
+              <div class="chart-label">Total views by platform</div>
+              <div style="position:relative;height:220px;"><canvas id="platformViewsChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-label">Avg engagement rate by platform</div>
+              <div style="position:relative;height:220px;"><canvas id="platformEngChart"></canvas></div>
+            </div>
+          </div>
+          <div class="chart-card" id="compareStatsCard"></div>
+        </div>
+
+        <!-- GROWTH PAGE -->
+        <div id="page-growth" style="display:none;">
+          <div class="chart-card">
+            <div class="chart-label">Cumulative views over time</div>
+            <div style="position:relative;height:280px;"><canvas id="growthChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label">Videos published per month</div>
+            <div style="position:relative;height:220px;"><canvas id="cadenceChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- VIDEOS PAGE -->
+        <div id="page-videos" style="display:none;">
+          <div class="filter-bar">
+            <span class="filter-label">Sort by:</span>
+            <select class="sort-select" id="sortSelect" onchange="renderVideosPage()">
+              <option value="views">Views</option>
+              <option value="likes">Likes</option>
+              <option value="comments">Comments</option>
+              <option value="engagement">Engagement %</option>
+              <option value="date">Date</option>
+            </select>
+            <span class="filter-label" style="margin-left:8px;">Order:</span>
+            <button class="filter-btn active" id="orderDesc" onclick="setOrder('desc',this)">↓ High to low</button>
+            <button class="filter-btn" id="orderAsc" onclick="setOrder('asc',this)">↑ Low to high</button>
+          </div>
+          <div class="chart-card" style="overflow-x:auto;">
+            <table class="video-table">
+              <thead><tr>
+                <th>Title</th>
+                <th>Platform</th>
+                <th onclick="setSortCol('date')" id="th-date">Date <span class="sort-arrow">↕</span></th>
+                <th onclick="setSortCol('views')" id="th-views">Views <span class="sort-arrow">↕</span></th>
+                <th onclick="setSortCol('likes')" id="th-likes">Likes <span class="sort-arrow">↕</span></th>
+                <th onclick="setSortCol('comments')" id="th-comments">Comments <span class="sort-arrow">↕</span></th>
+                <th onclick="setSortCol('shares')" id="th-shares">Shares <span class="sort-arrow">↕</span></th>
+                <th onclick="setSortCol('engagement')" id="th-engagement">Eng% <span class="sort-arrow">↕</span></th>
+                <th></th>
+              </tr></thead>
+              <tbody id="videoTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="main">
-    <div class="metric-grid" id="metricGrid"></div>
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('overview',this)">Overview</div>
-      <div class="tab" onclick="switchTab('videos',this)">All videos</div>
-      <div class="tab" onclick="switchTab('growth',this)">Growth</div>
+</div>
+
+<!-- INSTAGRAM MODAL -->
+<div class="modal-overlay" id="igModal">
+  <div class="modal">
+    <h2>📸 Add Instagram Reel</h2>
+    <p>Enter the stats from your Instagram Insights for this Reel.</p>
+    <div class="form-group">
+      <label class="form-label">Reel title / description</label>
+      <input class="form-input" id="ig-title" placeholder="e.g. Morning routine vlog"/>
     </div>
-    <div id="tab-overview">
-      <div class="chart-card">
-        <div class="chart-label">Views per Short</div>
-        <div style="position:relative;height:260px;"><canvas id="viewsChart"></canvas></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Date published</label>
+        <input class="form-input" id="ig-date" type="date"/>
       </div>
-      <div class="two-col">
-        <div class="chart-card">
-          <div class="chart-label">Likes per Short</div>
-          <div style="position:relative;height:200px;"><canvas id="likesChart"></canvas></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-label">Comments per Short</div>
-          <div style="position:relative;height:200px;"><canvas id="commentsChart"></canvas></div>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Views / Plays</label>
+        <input class="form-input" id="ig-views" type="number" placeholder="0"/>
       </div>
     </div>
-    <div id="tab-videos" style="display:none;">
-      <div class="chart-card" style="overflow-x:auto;">
-        <table class="video-table">
-          <thead><tr><th>Title</th><th>Published</th><th>Views</th><th>Likes</th><th>Comments</th><th>Engagement</th></tr></thead>
-          <tbody id="videoTableBody"></tbody>
-        </table>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Likes</label>
+        <input class="form-input" id="ig-likes" type="number" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comments</label>
+        <input class="form-input" id="ig-comments" type="number" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Shares</label>
+        <input class="form-input" id="ig-shares" type="number" placeholder="0"/>
       </div>
     </div>
-    <div id="tab-growth" style="display:none;">
-      <div class="chart-card">
-        <div class="chart-label">Cumulative views over time</div>
-        <div style="position:relative;height:260px;"><canvas id="growthChart"></canvas></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Saves</label>
+        <input class="form-input" id="ig-saves" type="number" placeholder="0"/>
       </div>
-      <div class="chart-card">
-        <div class="chart-label">Shorts published per month</div>
-        <div style="position:relative;height:200px;"><canvas id="cadenceChart"></canvas></div>
+      <div class="form-group">
+        <label class="form-label">Reach</label>
+        <input class="form-input" id="ig-reach" type="number" placeholder="0"/>
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Reel URL (optional)</label>
+      <input class="form-input" id="ig-url" placeholder="https://instagram.com/reel/..."/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('ig')">Cancel</button>
+      <button class="btn btn-ig" onclick="saveIG()">Save Reel</button>
+    </div>
+    <div id="ig-saved-list" style="margin-top:1.5rem;"></div>
+  </div>
+</div>
+
+<!-- TIKTOK MODAL -->
+<div class="modal-overlay" id="ttModal">
+  <div class="modal">
+    <h2>🎵 Add TikTok Video</h2>
+    <p>Enter the stats from your TikTok Analytics for this video.</p>
+    <div class="form-group">
+      <label class="form-label">Video title / description</label>
+      <input class="form-input" id="tt-title" placeholder="e.g. Day in my life"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Date published</label>
+        <input class="form-input" id="tt-date" type="date"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Views</label>
+        <input class="form-input" id="tt-views" type="number" placeholder="0"/>
+      </div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Likes</label>
+        <input class="form-input" id="tt-likes" type="number" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comments</label>
+        <input class="form-input" id="tt-comments" type="number" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Shares</label>
+        <input class="form-input" id="tt-shares" type="number" placeholder="0"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Avg watch time (sec)</label>
+        <input class="form-input" id="tt-watchtime" type="number" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Watch % completed</label>
+        <input class="form-input" id="tt-watchpct" type="number" placeholder="0" max="100"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">TikTok URL (optional)</label>
+      <input class="form-input" id="tt-url" placeholder="https://tiktok.com/@you/video/..."/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('tt')">Cancel</button>
+      <button class="btn btn-tt" style="color:#000;" onclick="saveTT()">Save Video</button>
+    </div>
+    <div id="tt-saved-list" style="margin-top:1.5rem;"></div>
   </div>
 </div>
 
@@ -156,48 +417,73 @@
 const CHANNEL_ID = 'UCH6Y34ndSHpQ5chh0bk6Iqg';
 let API_KEY = '';
 let charts = {};
+let sortCol = 'views';
+let sortDir = 'desc';
+let currentFilter = 'all';
+let currentPage = 'overview';
 
+// DATA STORE
+function getData() {
+  return {
+    youtube: JSON.parse(localStorage.getItem('yt_videos') || '[]'),
+    instagram: JSON.parse(localStorage.getItem('ig_videos') || '[]'),
+    tiktok: JSON.parse(localStorage.getItem('tt_videos') || '[]')
+  };
+}
+
+function getFiltered() {
+  const d = getData();
+  if (currentFilter === 'youtube') return d.youtube;
+  if (currentFilter === 'instagram') return d.instagram;
+  if (currentFilter === 'tiktok') return d.tiktok;
+  return [...d.youtube, ...d.instagram, ...d.tiktok];
+}
+
+// SETUP
 function show(id) {
-  ['signinView','loadingView','dashboardView'].forEach(v => {
+  ['setupView','loadingView','appView'].forEach(v => {
     const el = document.getElementById(v);
-    el.style.display = v === id ? (v === 'signinView' || v === 'loadingView' ? 'flex' : 'block') : 'none';
+    el.style.display = v === id ? (v === 'appView' ? 'block' : 'flex') : 'none';
   });
 }
 
 function showErr(msg) {
-  const el = document.getElementById('authError');
-  el.style.display = 'block';
-  el.textContent = msg;
+  const el = document.getElementById('setupError');
+  el.style.display = 'block'; el.textContent = msg;
 }
 
-async function loadData() {
+async function setup() {
   const key = document.getElementById('apiKeyInput').value.trim();
   if (!key) { showErr('Please paste your API key.'); return; }
   API_KEY = key;
   localStorage.setItem('yt_key', key);
-  document.getElementById('authError').style.display = 'none';
-  await fetchAndRender();
+  document.getElementById('setupError').style.display = 'none';
+  await fetchYT();
+}
+
+function skipSetup() {
+  localStorage.setItem('yt_skipped', '1');
+  show('appView');
+  renderAll();
 }
 
 function logout() {
+  ['yt_key','yt_videos','yt_name','ig_videos','tt_videos','yt_skipped'].forEach(k => localStorage.removeItem(k));
   API_KEY = '';
-  localStorage.removeItem('yt_key');
-  localStorage.removeItem('yt_videos');
-  localStorage.removeItem('yt_name');
-  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} });
+  Object.values(charts).forEach(c => { try{c.destroy();}catch(e){} });
   charts = {};
-  show('signinView');
+  show('setupView');
 }
 
-async function fetchAndRender() {
+// YOUTUBE
+async function fetchYT() {
   show('loadingView');
   try {
     setLoading('Connecting to YouTube...');
     const ch = await ytFetch(`channels?part=contentDetails,snippet&id=${CHANNEL_ID}`);
-    if (!ch.items || !ch.items.length) throw new Error('Channel not found. Make sure YouTube Data API v3 is enabled and your key has no restrictions.');
+    if (!ch.items || !ch.items.length) throw new Error('Channel not found. Check your API key and that YouTube Data API v3 is enabled.');
     const name = ch.items[0].snippet.title;
     const uploadsId = ch.items[0].contentDetails.relatedPlaylists.uploads;
-    document.getElementById('channelName').textContent = name + ' — Shorts';
     localStorage.setItem('yt_name', name);
 
     setLoading('Fetching video list...');
@@ -205,19 +491,23 @@ async function fetchAndRender() {
 
     setLoading(`Loading ${ids.length} videos...`);
     const videos = await getVideoDetails(ids);
-
     const shorts = videos.filter(v => v.duration <= 180);
     const toShow = shorts.length ? shorts : videos;
-    if (!toShow.length) throw new Error('No videos found on this channel.');
 
     localStorage.setItem('yt_videos', JSON.stringify(toShow));
-    renderDashboard(toShow);
-    document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-    show('dashboardView');
+    document.getElementById('lastUpdated').textContent = 'YT updated ' + new Date().toLocaleTimeString();
+    show('appView');
+    renderAll();
   } catch(err) {
-    show('signinView');
-    showErr(err.message || 'Failed to fetch data. Check your API key.');
+    show('setupView');
+    showErr(err.message || 'Failed. Check your API key.');
   }
+}
+
+async function refreshYT() {
+  if (!API_KEY) { API_KEY = localStorage.getItem('yt_key') || ''; }
+  if (!API_KEY) { alert('No API key saved. Please sign out and reconnect.'); return; }
+  await fetchYT();
 }
 
 function setLoading(msg) { document.getElementById('loadingText').textContent = msg; }
@@ -244,15 +534,18 @@ async function getVideoIds(playlistId) {
 async function getVideoDetails(ids) {
   const results = [];
   for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50).join(',');
+    const chunk = ids.slice(i, i+50).join(',');
     const d = await ytFetch(`videos?part=snippet,statistics,contentDetails&id=${chunk}`);
     for (const v of d.items) {
       const secs = parseDur(v.contentDetails.duration);
       results.push({
-        id: v.id, title: v.snippet.title, published: v.snippet.publishedAt,
-        views: parseInt(v.statistics.viewCount || 0),
-        likes: parseInt(v.statistics.likeCount || 0),
-        comments: parseInt(v.statistics.commentCount || 0),
+        id: v.id, platform: 'youtube',
+        title: v.snippet.title, published: v.snippet.publishedAt.slice(0,10),
+        views: parseInt(v.statistics.viewCount||0),
+        likes: parseInt(v.statistics.likeCount||0),
+        comments: parseInt(v.statistics.commentCount||0),
+        shares: 0, saves: 0, reach: 0,
+        url: `https://youtube.com/shorts/${v.id}`,
         duration: secs
       });
     }
@@ -264,80 +557,326 @@ function parseDur(d) {
   if (!d) return 0;
   const m = d.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!m) return 0;
-  return (+(m[1]||0))*3600 + (+(m[2]||0))*60 + (+(m[3]||0));
+  return (+(m[1]||0))*3600+(+(m[2]||0))*60+(+(m[3]||0));
 }
 
-function renderDashboard(videos) {
+// INSTAGRAM
+function openModal(platform) {
+  if (platform === 'ig') {
+    document.getElementById('igModal').classList.add('open');
+    renderSavedList('ig');
+    document.getElementById('ig-date').value = new Date().toISOString().slice(0,10);
+  } else {
+    document.getElementById('ttModal').classList.add('open');
+    renderSavedList('tt');
+    document.getElementById('tt-date').value = new Date().toISOString().slice(0,10);
+  }
+}
+
+function closeModal(p) {
+  document.getElementById(p==='ig'?'igModal':'ttModal').classList.remove('open');
+}
+
+function saveIG() {
+  const title = document.getElementById('ig-title').value.trim();
+  if (!title) { alert('Please enter a title.'); return; }
+  const video = {
+    id: 'ig_' + Date.now(), platform: 'instagram',
+    title, published: document.getElementById('ig-date').value,
+    views: parseInt(document.getElementById('ig-views').value||0),
+    likes: parseInt(document.getElementById('ig-likes').value||0),
+    comments: parseInt(document.getElementById('ig-comments').value||0),
+    shares: parseInt(document.getElementById('ig-shares').value||0),
+    saves: parseInt(document.getElementById('ig-saves').value||0),
+    reach: parseInt(document.getElementById('ig-reach').value||0),
+    url: document.getElementById('ig-url').value.trim()
+  };
+  const list = JSON.parse(localStorage.getItem('ig_videos')||'[]');
+  list.push(video);
+  localStorage.setItem('ig_videos', JSON.stringify(list));
+  ['ig-title','ig-views','ig-likes','ig-comments','ig-shares','ig-saves','ig-reach','ig-url'].forEach(id => document.getElementById(id).value='');
+  renderSavedList('ig');
+  renderAll();
+}
+
+function saveTT() {
+  const title = document.getElementById('tt-title').value.trim();
+  if (!title) { alert('Please enter a title.'); return; }
+  const video = {
+    id: 'tt_' + Date.now(), platform: 'tiktok',
+    title, published: document.getElementById('tt-date').value,
+    views: parseInt(document.getElementById('tt-views').value||0),
+    likes: parseInt(document.getElementById('tt-likes').value||0),
+    comments: parseInt(document.getElementById('tt-comments').value||0),
+    shares: parseInt(document.getElementById('tt-shares').value||0),
+    saves: 0, reach: 0,
+    watchtime: parseInt(document.getElementById('tt-watchtime').value||0),
+    watchpct: parseInt(document.getElementById('tt-watchpct').value||0),
+    url: document.getElementById('tt-url').value.trim()
+  };
+  const list = JSON.parse(localStorage.getItem('tt_videos')||'[]');
+  list.push(video);
+  localStorage.setItem('tt_videos', JSON.stringify(list));
+  ['tt-title','tt-views','tt-likes','tt-comments','tt-shares','tt-watchtime','tt-watchpct','tt-url'].forEach(id => document.getElementById(id).value='');
+  renderSavedList('tt');
+  renderAll();
+}
+
+function deleteVideo(platform, id) {
+  const key = platform === 'ig' ? 'ig_videos' : 'tt_videos';
+  const list = JSON.parse(localStorage.getItem(key)||'[]').filter(v => v.id !== id);
+  localStorage.setItem(key, JSON.stringify(list));
+  renderSavedList(platform);
+  renderAll();
+}
+
+function renderSavedList(platform) {
+  const key = platform === 'ig' ? 'ig_videos' : 'tt_videos';
+  const list = JSON.parse(localStorage.getItem(key)||'[]');
+  const el = document.getElementById(platform+'-saved-list');
+  if (!list.length) { el.innerHTML=''; return; }
+  el.innerHTML = `<div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Saved (${list.length})</div>` +
+    list.map(v => `<div class="video-list-item">
+      <span style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.title}</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+        <span style="font-size:12px;color:var(--muted);">${fmt(v.views)} views</span>
+        <button class="del-btn" onclick="deleteVideo('${platform}','${v.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+// NAVIGATION
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  const titles = {all:'All Platforms',youtube:'YouTube Shorts',instagram:'Instagram Reels',tiktok:'TikTok'};
+  document.getElementById('topbarTitle').textContent = titles[f];
+  renderAll();
+}
+
+function showPage(p) {
+  currentPage = p;
+  ['overview','compare','growth','videos'].forEach(pg => {
+    document.getElementById('page-'+pg).style.display = pg===p ? 'block' : 'none';
+  });
+  renderAll();
+}
+
+function setOrder(dir, el) {
+  sortDir = dir;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderVideosPage();
+}
+
+function setSortCol(col) {
+  sortCol = col;
+  document.getElementById('sortSelect').value = col;
+  renderVideosPage();
+}
+
+// RENDER ALL
+function renderAll() {
+  const videos = getFiltered();
+  renderMetrics(videos);
+  if (currentPage === 'overview') renderOverview(videos);
+  if (currentPage === 'compare') renderCompare();
+  if (currentPage === 'growth') renderGrowth(videos);
+  if (currentPage === 'videos') renderVideosPage();
+}
+
+function engRate(v) {
+  if (!v.views) return 0;
+  return ((v.likes + v.comments + (v.shares||0)) / v.views * 100);
+}
+
+function renderMetrics(videos) {
+  if (!videos.length) {
+    document.getElementById('metricGrid').innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">📭</div>No data yet. Add Instagram/TikTok videos or refresh YouTube.</div>`;
+    return;
+  }
   const tv = videos.reduce((s,v)=>s+v.views,0);
   const tl = videos.reduce((s,v)=>s+v.likes,0);
   const tc = videos.reduce((s,v)=>s+v.comments,0);
+  const ts = videos.reduce((s,v)=>s+(v.shares||0),0);
   const av = Math.round(tv/videos.length);
-  const er = tv>0?((tl+tc)/tv*100).toFixed(2):'0.00';
+  const er = tv>0?((tl+tc+ts)/tv*100).toFixed(2):'0.00';
   document.getElementById('metricGrid').innerHTML = `
-    <div class="metric-card"><div class="metric-label">Total Shorts</div><div class="metric-value c-accent">${videos.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Total videos</div><div class="metric-value" style="color:var(--text)">${videos.length}</div><div class="metric-sub">${currentFilter==='all'?'across all platforms':currentFilter}</div></div>
     <div class="metric-card"><div class="metric-label">Total views</div><div class="metric-value c-blue">${fmt(tv)}</div></div>
     <div class="metric-card"><div class="metric-label">Total likes</div><div class="metric-value c-green">${fmt(tl)}</div></div>
     <div class="metric-card"><div class="metric-label">Total comments</div><div class="metric-value c-yellow">${fmt(tc)}</div></div>
-    <div class="metric-card"><div class="metric-label">Avg views / Short</div><div class="metric-value c-purple">${fmt(av)}</div></div>
-    <div class="metric-card"><div class="metric-label">Engagement rate</div><div class="metric-value c-accent">${er}%</div></div>
+    <div class="metric-card"><div class="metric-label">Total shares</div><div class="metric-value c-purple">${fmt(ts)}</div></div>
+    <div class="metric-card"><div class="metric-label">Avg views/video</div><div class="metric-value c-yt">${fmt(av)}</div></div>
+    <div class="metric-card"><div class="metric-label">Engagement rate</div><div class="metric-value c-green">${er}%</div></div>
   `;
+}
+
+function renderOverview(videos) {
+  if (!videos.length) return;
   const sorted = [...videos].sort((a,b)=>new Date(a.published)-new Date(b.published));
   const labels = sorted.map(v=>v.title.length>18?v.title.slice(0,16)+'…':v.title);
-  mkChart('viewsChart','bar',labels,sorted.map(v=>v.views),'#60a5fa','Views');
-  mkChart('likesChart','bar',labels,sorted.map(v=>v.likes),'#4ade80','Likes');
-  mkChart('commentsChart','bar',labels,sorted.map(v=>v.comments),'#fbbf24','Comments');
+  const colors = sorted.map(v=>v.platform==='youtube'?'#ff4d4dbb':v.platform==='instagram'?'#e1306cbb':'#00f2eabb');
+  const borderColors = sorted.map(v=>v.platform==='youtube'?'#ff4d4d':v.platform==='instagram'?'#e1306c':'#00f2ea');
+  mkChartMulti('viewsChart','bar',labels,sorted.map(v=>v.views),colors,borderColors,'Views');
+  mkChartMulti('likesChart','bar',labels,sorted.map(v=>v.likes),colors,borderColors,'Likes');
+  mkChartMulti('engChart','bar',labels,sorted.map(v=>+engRate(v).toFixed(2)),colors,borderColors,'Eng%');
+}
+
+function renderCompare() {
+  const d = getData();
+  const platforms = ['youtube','instagram','tiktok'];
+  const names = ['YouTube','Instagram','TikTok'];
+  const colors = ['#ff4d4d','#e1306c','#00f2ea'];
+
+  const totalViews = platforms.map(p => d[p].reduce((s,v)=>s+v.views,0));
+  const avgEng = platforms.map(p => {
+    if (!d[p].length) return 0;
+    return +(d[p].reduce((s,v)=>s+engRate(v),0)/d[p].length).toFixed(2);
+  });
+
+  mkChartDoughnut('platformViewsChart', names, totalViews, colors);
+  mkChartBar('platformEngChart', names, avgEng, colors, 'Avg Eng%');
+
+  const card = document.getElementById('compareStatsCard');
+  const maxV = Math.max(...totalViews, 1);
+  card.innerHTML = `<div class="chart-label" style="margin-bottom:1rem;">Platform breakdown</div>` +
+    platforms.map((p,i) => {
+      const vids = d[p];
+      const tv = totalViews[i];
+      const tl = vids.reduce((s,v)=>s+v.likes,0);
+      const tc = vids.reduce((s,v)=>s+v.comments,0);
+      const ts = vids.reduce((s,v)=>s+(v.shares||0),0);
+      return `<div style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:14px;font-weight:500;">${names[i]}</span>
+          <span class="platform-badge pb-${p}">${vids.length} videos</span>
+        </div>
+        <div class="compare-bar-wrap">
+          <div class="compare-label"><span style="font-size:12px;color:var(--muted);">Views</span><span style="font-family:var(--mono);font-size:12px;">${fmt(tv)}</span></div>
+          <div class="compare-bar"><div class="compare-fill" style="width:${(tv/maxV*100).toFixed(1)}%;background:${colors[i]};"></div></div>
+        </div>
+        <div style="display:flex;gap:1.5rem;margin-top:8px;font-size:13px;color:var(--muted);">
+          <span>👍 ${fmt(tl)}</span><span>💬 ${fmt(tc)}</span><span>↗️ ${fmt(ts)}</span><span>📊 ${avgEng[i]}% eng</span>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function renderGrowth(videos) {
+  if (!videos.length) return;
+  const sorted = [...videos].sort((a,b)=>new Date(a.published)-new Date(b.published));
+  const labels = sorted.map(v=>v.published);
   let cum=0;
-  mkChart('growthChart','line',labels,sorted.map(v=>{cum+=v.views;return cum;}),'#a78bfa','Views',true);
+  const cumData = sorted.map(v=>{cum+=v.views;return cum;});
+  mkChart('growthChart','line',labels,cumData,'#60a5fa','Views',true);
+
   const mm={};
   sorted.forEach(v=>{const mo=v.published.slice(0,7);mm[mo]=(mm[mo]||0)+1;});
   const months=Object.keys(mm).sort();
   mkChart('cadenceChart','bar',months,months.map(m=>mm[m]),'#ff8c42','Videos');
-  document.getElementById('videoTableBody').innerHTML=[...videos].sort((a,b)=>b.views-a.views).map(v=>{
-    const eng=v.views>0?((v.likes+v.comments)/v.views*100).toFixed(2):'0.00';
-    const bc=+eng>=5?'bg':+eng>=2?'ba':'br';
-    return `<tr>
-      <td title="${v.title}"><a href="https://youtube.com/shorts/${v.id}" target="_blank">${v.title.length>42?v.title.slice(0,40)+'…':v.title}</a></td>
-      <td style="color:var(--muted);white-space:nowrap">${v.published.slice(0,10)}</td>
-      <td style="font-family:var(--mono)">${fmt(v.views)}</td>
-      <td style="font-family:var(--mono)">${fmt(v.likes)}</td>
-      <td style="font-family:var(--mono)">${fmt(v.comments)}</td>
-      <td><span class="badge ${bc}">${eng}%</span></td>
-    </tr>`;
-  }).join('');
 }
 
+function renderVideosPage() {
+  const videos = getFiltered();
+  const col = document.getElementById('sortSelect').value || sortCol;
+  sortCol = col;
+
+  ['date','views','likes','comments','shares','engagement'].forEach(c => {
+    const th = document.getElementById('th-'+c);
+    if (th) th.classList.toggle('sorted', c===sortCol);
+  });
+
+  const sorted = [...videos].sort((a,b) => {
+    let va, vb;
+    if (sortCol==='engagement'){va=engRate(a);vb=engRate(b);}
+    else if (sortCol==='date'){va=new Date(a.published);vb=new Date(b.published);}
+    else{va=a[sortCol]||0;vb=b[sortCol]||0;}
+    return sortDir==='desc' ? (vb>va?1:-1) : (va>vb?1:-1);
+  });
+
+  document.getElementById('videoTableBody').innerHTML = sorted.map(v => {
+    const eng = engRate(v).toFixed(2);
+    const bc = +eng>=5?'eg':+eng>=2?'ea':'er';
+    const urlHtml = v.url ? `<a href="${v.url}" target="_blank" style="color:var(--text);text-decoration:none;">${v.title.length>36?v.title.slice(0,34)+'…':v.title}</a>` : (v.title.length>36?v.title.slice(0,34)+'…':v.title);
+    const delBtn = v.platform!=='youtube' ? `<button class="del-btn" onclick="deleteVideo('${v.platform==='instagram'?'ig':'tt'}','${v.id}')">✕</button>` : '';
+    return `<tr>
+      <td title="${v.title}">${urlHtml}</td>
+      <td><span class="platform-badge pb-${v.platform}">${v.platform==='youtube'?'YT':v.platform==='instagram'?'IG':'TT'}</span></td>
+      <td style="color:var(--muted);white-space:nowrap;">${v.published||'—'}</td>
+      <td style="font-family:var(--mono);">${fmt(v.views)}</td>
+      <td style="font-family:var(--mono);">${fmt(v.likes)}</td>
+      <td style="font-family:var(--mono);">${fmt(v.comments)}</td>
+      <td style="font-family:var(--mono);">${fmt(v.shares||0)}</td>
+      <td><span class="eng-badge ${bc}">${eng}%</span></td>
+      <td>${delBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" class="empty-state">No videos found.</td></tr>`;
+}
+
+// CHARTS
 function mkChart(id,type,labels,data,color,label,fill=false){
   if(charts[id]){try{charts[id].destroy();}catch(e){}}
-  const ctx=document.getElementById(id);
-  if(!ctx)return;
+  const ctx=document.getElementById(id);if(!ctx)return;
   charts[id]=new Chart(ctx,{type,
     data:{labels,datasets:[{label,data,backgroundColor:type==='line'?color+'22':color+'bb',borderColor:color,borderWidth:type==='line'?2:0,fill,tension:0.3,pointRadius:3,pointBackgroundColor:color}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
-      x:{ticks:{color:'#666',font:{size:10},maxRotation:45,autoSkip:true},grid:{display:false},border:{color:'rgba(255,255,255,0.05)'}},
-      y:{ticks:{color:'#666',font:{size:11},callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,0.05)'},border:{color:'rgba(255,255,255,0.05)'}}
+      x:{ticks:{color:'#555',font:{size:10},maxRotation:45,autoSkip:true},grid:{display:false},border:{color:'rgba(255,255,255,0.04)'}},
+      y:{ticks:{color:'#555',font:{size:11},callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.04)'}}
     }}
   });
 }
 
-function fmt(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'K';return String(n);}
-
-function switchTab(tab,el){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  ['overview','videos','growth'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'block':'none');
+function mkChartMulti(id,type,labels,data,bgColors,borderColors,label){
+  if(charts[id]){try{charts[id].destroy();}catch(e){}}
+  const ctx=document.getElementById(id);if(!ctx)return;
+  charts[id]=new Chart(ctx,{type,
+    data:{labels,datasets:[{label,data,backgroundColor:bgColors,borderColor:borderColors,borderWidth:0,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      x:{ticks:{color:'#555',font:{size:10},maxRotation:45,autoSkip:true},grid:{display:false},border:{color:'rgba(255,255,255,0.04)'}},
+      y:{ticks:{color:'#555',font:{size:11},callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.04)'}}
+    }}
+  });
 }
 
+function mkChartDoughnut(id,labels,data,colors){
+  if(charts[id]){try{charts[id].destroy();}catch(e){}}
+  const ctx=document.getElementById(id);if(!ctx)return;
+  charts[id]=new Chart(ctx,{type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:colors.map(c=>c+'bb'),borderColor:colors,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#999',font:{size:12},padding:16}}},cutout:'65%'}
+  });
+}
+
+function mkChartBar(id,labels,data,colors,label){
+  if(charts[id]){try{charts[id].destroy();}catch(e){}}
+  const ctx=document.getElementById(id);if(!ctx)return;
+  charts[id]=new Chart(ctx,{type:'bar',
+    data:{labels,datasets:[{label,data,backgroundColor:colors.map(c=>c+'bb'),borderColor:colors,borderWidth:0,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      x:{ticks:{color:'#555'},grid:{display:false},border:{color:'rgba(255,255,255,0.04)'}},
+      y:{ticks:{color:'#555',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.04)'}}
+    }}
+  });
+}
+
+function fmt(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'K';return String(n||0);}
+
+// Close modal on overlay click
+document.getElementById('igModal').addEventListener('click', function(e){if(e.target===this)closeModal('ig');});
+document.getElementById('ttModal').addEventListener('click', function(e){if(e.target===this)closeModal('tt');});
+
+// AUTO INIT
 (function init(){
   const k=localStorage.getItem('yt_key');
   const v=localStorage.getItem('yt_videos');
-  const n=localStorage.getItem('yt_name');
-  if(k&&v&&n){
-    API_KEY=k;
-    const videos=JSON.parse(v);
-    document.getElementById('channelName').textContent=n+' — Shorts';
-    renderDashboard(videos);
-    document.getElementById('lastUpdated').textContent='Cached — click Refresh to update';
-    show('dashboardView');
+  const skipped=localStorage.getItem('yt_skipped');
+  if(k){API_KEY=k;}
+  if((k&&v)||skipped){
+    show('appView');
+    document.getElementById('lastUpdated').textContent = v ? 'Cached — click ↻ Refresh YouTube' : '';
+    renderAll();
   }
 })();
 </script>
