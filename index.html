@@ -356,16 +356,29 @@ async function fetchIG(){
   const out=[];
   for(const m of reels){
     let views=0,reach=0,shares=0,saves=0;
+    // Meta renamed the Reels view metric over time. Try 'views' first (current),
+    // then fall back to 'plays' (older), so both old and new Reels return a count.
     try{
-      const ins=await igFetch(`${m.id}/insights?metric=plays,reach,shares,saved`);
+      const ins=await igFetch(`${m.id}/insights?metric=views,reach,shares,saved`);
       for(const metric of (ins.data||[])){
         const val=(metric.values&&metric.values[0])?metric.values[0].value:0;
-        if(metric.name==='plays')views=val;
+        if(metric.name==='views')views=val;
         if(metric.name==='reach')reach=val;
         if(metric.name==='shares')shares=val;
         if(metric.name==='saved')saves=val;
       }
-    }catch(e){/* some older media may not return insights */}
+    }catch(e){
+      try{
+        const ins=await igFetch(`${m.id}/insights?metric=plays,reach,shares,saved`);
+        for(const metric of (ins.data||[])){
+          const val=(metric.values&&metric.values[0])?metric.values[0].value:0;
+          if(metric.name==='plays')views=val;
+          if(metric.name==='reach')reach=val;
+          if(metric.name==='shares')shares=val;
+          if(metric.name==='saved')saves=val;
+        }
+      }catch(e2){/* media without insights - leave at 0 */}
+    }
     const cap=(m.caption||'Untitled').split('\n')[0].slice(0,80);
     out.push({id:m.id,platform:'instagram',title:cap,published:(m.timestamp||'').slice(0,10),
       views:views||0,likes:m.like_count||0,comments:m.comments_count||0,shares:shares||0,saves:saves||0,reach:reach||0,
