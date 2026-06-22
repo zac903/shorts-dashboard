@@ -8,30 +8,31 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 :root{
-  --bg:#0a0a0c;--surface:#131316;--surface2:#1c1c21;--surface3:#242429;
-  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
-  --text:#f0f0f0;--muted:#666;--muted2:#999;
+  --bg:#0a1733;--bg2:#0d1d3f;--surface:#10224a;--surface2:#162c5a;--surface3:#1d3970;
+  --border:rgba(120,160,255,0.12);--border2:rgba(120,160,255,0.25);
+  --text:#eaf1ff;--muted:#7088b5;--muted2:#9fb3d9;
   --yt:#ff4d4d;--ig:#e1306c;
-  --green:#4ade80;--blue:#60a5fa;--purple:#a78bfa;--yellow:#fbbf24;--orange:#fb923c;
+  --accent:#3d7eff;--accent2:#5b9bff;--ball:#c8f04a;
+  --green:#4ade80;--blue:#5b9bff;--purple:#a78bfa;--yellow:#fbbf24;--orange:#fb923c;
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
-  --radius:14px;--radius-sm:8px;
+  --radius:16px;--radius-sm:10px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;}
+body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122a 100%);background-attachment:fixed;color:var(--text);min-height:100vh;}
 .app{display:flex;min-height:100vh;}
 .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);padding:1.5rem 1rem;display:flex;flex-direction:column;gap:4px;position:fixed;top:0;left:0;height:100vh;z-index:200;overflow-y:auto;}
 .main-area{margin-left:220px;flex:1;min-height:100vh;}
 .topbar{padding:1rem 2rem;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .content{padding:2rem;max-width:1200px;}
 .sidebar-logo{display:flex;align-items:center;gap:10px;padding:0.5rem;margin-bottom:1.5rem;}
-.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--yt),var(--ig));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
-.logo-text{font-size:15px;font-weight:600;}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.logo-text{font-size:15px;font-weight:600;letter-spacing:-0.01em;}
 .nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;padding:0.5rem;margin-top:1rem;margin-bottom:4px;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);font-size:14px;cursor:pointer;color:var(--muted2);transition:all 0.15s;border:none;background:none;width:100%;text-align:left;}
 .nav-item:hover{background:var(--surface2);color:var(--text);}
 .nav-item.active{background:var(--surface2);color:var(--text);font-weight:500;}
 .nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.dot-all{background:linear-gradient(135deg,var(--yt),var(--ig));}
+.dot-all{background:linear-gradient(135deg,var(--accent),var(--ig));}
 .dot-yt{background:var(--yt);}
 .dot-ig{background:var(--ig);}
 .sidebar-bottom{margin-top:auto;padding-top:1rem;border-top:1px solid var(--border);}
@@ -40,7 +41,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .last-updated{font-size:12px;color:var(--muted);font-family:var(--mono);}
 .btn{padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--font);font-size:13px;cursor:pointer;transition:background 0.15s;}
 .btn:hover{background:var(--surface3);}
-.btn-primary{background:var(--yt);border-color:var(--yt);color:white;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:white;}
+.dot-all{background:linear-gradient(135deg,var(--accent),var(--ball));}
 .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem;}
 .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;transition:border-color 0.2s;}
 .metric-card:hover{border-color:var(--border2);}
@@ -52,6 +54,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .pb-yt{background:rgba(255,77,77,0.15);color:var(--yt);}
 .pb-ig{background:rgba(225,48,108,0.15);color:var(--ig);}
 .filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;}
+.date-bar{display:flex;align-items:center;gap:6px;margin-bottom:1.5rem;flex-wrap:wrap;padding-bottom:1.25rem;border-bottom:1px solid var(--border);}
+.date-bar-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-right:6px;}
+.date-btn{padding:6px 14px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted2);font-size:13px;cursor:pointer;transition:all 0.15s;font-family:var(--font);}
+.date-btn:hover{border-color:var(--border2);color:var(--text);}
+.date-btn.active{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:500;}
 .filter-label{font-size:12px;color:var(--muted);margin-right:4px;}
 .filter-btn{padding:5px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted2);font-size:12px;cursor:pointer;transition:all 0.15s;font-family:var(--font);}
 .filter-btn:hover{border-color:var(--border2);color:var(--text);}
@@ -75,22 +82,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ea{background:rgba(251,191,36,0.12);color:var(--yellow);}
 .er{background:rgba(255,77,77,0.12);color:var(--yt);}
 #setupView{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
-#setupView::before{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(255,77,77,0.08) 0%,transparent 70%);top:-200px;left:-200px;pointer-events:none;}
+#setupView::before{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(61,126,255,0.12) 0%,transparent 70%);top:-200px;left:-200px;pointer-events:none;}
 .setup-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:2.5rem;width:520px;max-width:95vw;position:relative;z-index:1;}
-.setup-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--yt),var(--ig));border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:26px;}
-.setup-card h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:8px;}
+.setup-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:26px;}
+.setup-card h1{font-size:28px;font-weight:600;text-align:center;margin-bottom:8px;letter-spacing:-0.02em;}
+.setup-card h1 .accent-word{color:var(--accent);}
 .setup-card>p{color:var(--muted);font-size:14px;text-align:center;margin-bottom:1.5rem;line-height:1.6;}
 .setup-section{margin-bottom:1.25rem;}
 .setup-section-label{font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
 .api-input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:8px;outline:none;}
 .api-input:focus{border-color:rgba(255,255,255,0.25);}
-.btn-load{width:100%;padding:14px;border-radius:12px;border:none;background:var(--yt);color:white;font-family:var(--font);font-size:15px;font-weight:500;cursor:pointer;transition:opacity 0.2s;margin-top:6px;}
+.btn-load{width:100%;padding:14px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:var(--font);font-size:15px;font-weight:500;cursor:pointer;transition:opacity 0.2s;margin-top:6px;}
 .btn-load:hover{opacity:0.9;}
 .hint{font-size:11px;color:var(--muted);margin-top:10px;text-align:center;line-height:1.5;}
 .error-box{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.3);border-radius:10px;padding:12px;font-size:13px;color:#ff8a8a;margin-top:1rem;display:none;}
 .divider-line{height:1px;background:var(--border);margin:1.25rem 0;}
 #loadingView{min-height:100vh;display:none;align-items:center;justify-content:center;flex-direction:column;gap:1rem;}
-.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--yt);border-radius:50%;animation:spin 0.8s linear infinite;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .loading-text{color:var(--muted);font-size:14px;}
 .token-warn{font-size:11px;color:var(--yellow);background:rgba(251,191,36,0.1);border-radius:8px;padding:8px 10px;margin-top:10px;line-height:1.4;}
@@ -101,7 +109,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 <div id="setupView">
   <div class="setup-card">
     <div class="setup-logo">📊</div>
-    <h1>Content Dashboard</h1>
+    <h1>Content <span class="accent-word">Dashboard</span></h1>
     <p>Connect YouTube and Instagram to auto-load all your content analytics.</p>
 
     <div class="setup-section">
@@ -144,6 +152,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <button class="nav-item" onclick="showPage('overview')">📈 Overview</button>
       <button class="nav-item" onclick="showPage('compare')">⚖️ Compare</button>
       <button class="nav-item" onclick="showPage('growth')">📅 Growth</button>
+      <button class="nav-item" onclick="showPage('followers')">👥 Followers</button>
       <button class="nav-item" onclick="showPage('videos')">🎬 All videos</button>
       <div class="sidebar-bottom">
         <button class="nav-item" onclick="refreshAll()">↻ Refresh data</button>
@@ -161,6 +170,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </div>
       </div>
       <div class="content">
+        <div class="date-bar">
+          <span class="date-bar-label">Time period</span>
+          <button class="date-btn active" onclick="setDateRange('all',this)">All time</button>
+          <button class="date-btn" onclick="setDateRange('week',this)">This week</button>
+          <button class="date-btn" onclick="setDateRange('month',this)">Last month</button>
+          <button class="date-btn" onclick="setDateRange('3months',this)">Last 3 months</button>
+          <button class="date-btn" onclick="setDateRange('year',this)">Last year</button>
+        </div>
         <div id="page-overview">
           <div class="metric-grid" id="metricGrid"></div>
           <div class="chart-card">
@@ -199,6 +216,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <div class="chart-card">
             <div class="chart-label">Videos published per month</div>
             <div style="position:relative;height:220px;"><canvas id="cadenceChart"></canvas></div>
+          </div>
+        </div>
+        <div id="page-followers" style="display:none;">
+          <div class="metric-grid" id="followerMetrics"></div>
+          <div class="chart-card">
+            <div class="chart-label">Follower growth over time</div>
+            <div style="position:relative;height:280px;"><canvas id="followerChart"></canvas></div>
+          </div>
+          <div class="chart-card" id="followerNote" style="font-size:13px;color:var(--muted2);line-height:1.6;">
+            Follower history starts building from your first refresh. Each time you click Refresh, today's follower count is saved — so this chart fills out over the coming days and weeks. The social platforms don't provide historical follower data, so it can only track forward from now.
           </div>
         </div>
         <div id="page-videos" style="display:none;">
@@ -241,7 +268,7 @@ const CHANNEL_ID = 'UCH6Y34ndSHpQ5chh0bk6Iqg';
 const IG_VERSION = 'v25.0';
 let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='';
 let charts={};
-let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview';
+let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all';
 
 function show(id){
   ['setupView','loadingView','appView'].forEach(v=>{
@@ -257,11 +284,43 @@ function getData(){
     instagram: JSON.parse(localStorage.getItem('ig_videos')||'[]')
   };
 }
+// Follower history: records a daily snapshot per platform so we can chart growth
+// over time. The APIs only give the current count, so history builds from today on.
+function recordFollowers(platform,count){
+  const key='followers_'+platform;
+  const hist=JSON.parse(localStorage.getItem(key)||'[]');
+  const today=new Date().toISOString().slice(0,10);
+  const existing=hist.find(h=>h.date===today);
+  if(existing){existing.count=count;}
+  else{hist.push({date:today,count:count});}
+  localStorage.setItem(key,JSON.stringify(hist));
+}
+function getFollowerHistory(platform){return JSON.parse(localStorage.getItem('followers_'+platform)||'[]');}
+function latestFollowers(platform){const h=getFollowerHistory(platform);return h.length?h[h.length-1].count:0;}
 function getFiltered(){
   const d=getData();
-  if(currentFilter==='youtube')return d.youtube;
-  if(currentFilter==='instagram')return d.instagram;
-  return [...d.youtube,...d.instagram];
+  let vids;
+  if(currentFilter==='youtube')vids=d.youtube;
+  else if(currentFilter==='instagram')vids=d.instagram;
+  else vids=[...d.youtube,...d.instagram];
+  return applyDateRange(vids);
+}
+function applyDateRange(vids){
+  if(dateRange==='all')return vids;
+  const now=new Date();
+  let cutoff;
+  if(dateRange==='week'){cutoff=new Date(now);cutoff.setDate(now.getDate()-7);}
+  else if(dateRange==='month'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-1);}
+  else if(dateRange==='3months'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-3);}
+  else if(dateRange==='year'){cutoff=new Date(now);cutoff.setFullYear(now.getFullYear()-1);}
+  else return vids;
+  return vids.filter(v=>v.published && new Date(v.published)>=cutoff);
+}
+function setDateRange(r,el){
+  dateRange=r;
+  document.querySelectorAll('.date-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
 }
 
 async function setup(){
@@ -310,8 +369,10 @@ async function ytFetch(path){
   return d;
 }
 async function fetchYT(){
-  const ch=await ytFetch(`channels?part=contentDetails,snippet&id=${CHANNEL_ID}`);
+  const ch=await ytFetch(`channels?part=contentDetails,snippet,statistics&id=${CHANNEL_ID}`);
   if(!ch.items||!ch.items.length)throw new Error('Channel not found.');
+  const subs=parseInt(ch.items[0].statistics.subscriberCount||0);
+  if(subs)recordFollowers('youtube',subs);
   const uploads=ch.items[0].contentDetails.relatedPlaylists.uploads;
   let ids=[],pt='';
   do{
@@ -343,6 +404,11 @@ async function igFetch(path){
   return d;
 }
 async function fetchIG(){
+  // Grab current follower count for growth tracking
+  try{
+    const prof=await igFetch(`${IG_ACCOUNT}?fields=followers_count`);
+    if(prof.followers_count)recordFollowers('instagram',prof.followers_count);
+  }catch(e){}
   // Get media list (reels + videos)
   let media=[],after='';
   do{
@@ -355,36 +421,39 @@ async function fetchIG(){
   const reels=media.filter(m=>m.media_product_type==='REELS'||m.media_type==='VIDEO');
   const out=[];
   for(const m of reels){
-    let views=0,reach=0,shares=0,saves=0;
-    // Meta renamed the Reels view metric over time. Try 'views' first (current),
-    // then fall back to 'plays' (older), so both old and new Reels return a count.
-    try{
-      const ins=await igFetch(`${m.id}/insights?metric=views,reach,shares,saved`);
-      for(const metric of (ins.data||[])){
-        const val=(metric.values&&metric.values[0])?metric.values[0].value:0;
-        if(metric.name==='views')views=val;
-        if(metric.name==='reach')reach=val;
-        if(metric.name==='shares')shares=val;
-        if(metric.name==='saved')saves=val;
-      }
-    }catch(e){
-      try{
-        const ins=await igFetch(`${m.id}/insights?metric=plays,reach,shares,saved`);
-        for(const metric of (ins.data||[])){
-          const val=(metric.values&&metric.values[0])?metric.values[0].value:0;
-          if(metric.name==='plays')views=val;
-          if(metric.name==='reach')reach=val;
-          if(metric.name==='shares')shares=val;
-          if(metric.name==='saved')saves=val;
-        }
-      }catch(e2){/* media without insights - leave at 0 */}
-    }
+    // Request metrics one at a time. Meta rejects the WHOLE call if any single
+    // metric in a combined list is invalid for that media — which silently zeroed
+    // everything. Per-metric calls mean a missing one never kills the others.
+    const views = await igMetric(m.id, 'views');   // current Reels view count
+    const reach = await igMetric(m.id, 'reach');
+    const shares= await igMetric(m.id, 'shares');
+    const saves = await igMetric(m.id, 'saved');
     const cap=(m.caption||'Untitled').split('\n')[0].slice(0,80);
     out.push({id:m.id,platform:'instagram',title:cap,published:(m.timestamp||'').slice(0,10),
       views:views||0,likes:m.like_count||0,comments:m.comments_count||0,shares:shares||0,saves:saves||0,reach:reach||0,
       url:m.permalink||''});
   }
   localStorage.setItem('ig_videos',JSON.stringify(out));
+}
+
+// Fetch a single insight metric for one media item. Returns 0 on any failure
+// (older media, metric not supported for that type, etc.) instead of throwing.
+async function igMetric(mediaId, metric){
+  try{
+    const ins=await igFetch(`${mediaId}/insights?metric=${metric}`);
+    const row=(ins.data&&ins.data[0]);
+    if(row && row.values && row.values[0]) return row.values[0].value||0;
+  }catch(e){
+    // 'views' is newer; if it's rejected for an older Reel, fall back to 'plays'
+    if(metric==='views'){
+      try{
+        const ins=await igFetch(`${mediaId}/insights?metric=plays`);
+        const row=(ins.data&&ins.data[0]);
+        if(row && row.values && row.values[0]) return row.values[0].value||0;
+      }catch(e2){}
+    }
+  }
+  return 0;
 }
 
 // ---- NAV ----
@@ -398,7 +467,7 @@ function setFilter(f,el){
 }
 function showPage(p){
   currentPage=p;
-  ['overview','compare','growth','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg===p?'block':'none');
+  ['overview','compare','growth','followers','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg===p?'block':'none');
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
@@ -423,6 +492,7 @@ function renderAll(){
   if(currentPage==='overview')renderOverview(videos);
   if(currentPage==='compare')renderCompare();
   if(currentPage==='growth')renderGrowth(videos);
+  if(currentPage==='followers')renderFollowers();
   if(currentPage==='videos')renderVideosPage();
 }
 function renderMetrics(videos){
@@ -474,6 +544,32 @@ function renderGrowth(videos){
   const months=Object.keys(mm).sort();
   mk('cadenceChart','bar',months,months.map(m=>mm[m]),'#fb923c');
 }
+function renderFollowers(){
+  const ytNow=latestFollowers('youtube'), igNow=latestFollowers('instagram');
+  const ytHist=getFollowerHistory('youtube'), igHist=getFollowerHistory('instagram');
+  const ytFirst=ytHist.length?ytHist[0].count:0, igFirst=igHist.length?igHist[0].count:0;
+  const ytGain=ytNow-ytFirst, igGain=igNow-igFirst;
+  const total=ytNow+igNow, totalGain=ytGain+igGain;
+  document.getElementById('followerMetrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Total followers</div><div class="metric-value">${fmt(total)}</div><div class="metric-sub">${totalGain>=0?'+':''}${fmt(totalGain)} since tracking</div></div>
+    <div class="metric-card"><div class="metric-label">YouTube subscribers</div><div class="metric-value c-yt">${fmt(ytNow)}</div><div class="metric-sub">${ytGain>=0?'+':''}${fmt(ytGain)} tracked</div></div>
+    <div class="metric-card"><div class="metric-label">Instagram followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain>=0?'+':''}${fmt(igGain)} tracked</div></div>`;
+  // Merge dates from both platforms
+  const allDates=[...new Set([...ytHist.map(h=>h.date),...igHist.map(h=>h.date)])].sort();
+  const ytMap=Object.fromEntries(ytHist.map(h=>[h.date,h.count]));
+  const igMap=Object.fromEntries(igHist.map(h=>[h.date,h.count]));
+  if(charts['followerChart']){try{charts['followerChart'].destroy();}catch(e){}}
+  const ctx=document.getElementById('followerChart');
+  if(!ctx)return;
+  if(!allDates.length){return;}
+  charts['followerChart']=new Chart(ctx,{type:'line',
+    data:{labels:allDates,datasets:[
+      {label:'YouTube',data:allDates.map(d=>ytMap[d]??null),borderColor:'#ff4d4d',backgroundColor:'#ff4d4d22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true},
+      {label:'Instagram',data:allDates.map(d=>igMap[d]??null),borderColor:'#e1306c',backgroundColor:'#e1306c22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#9fb3d9',font:{size:12},padding:16}}},scales:{x:{ticks:{color:'#7088b5',font:{size:10}},grid:{display:false},border:{color:'rgba(120,160,255,0.1)'}},y:{ticks:{color:'#7088b5',font:{size:11},callback:v=>fmt(v)},grid:{color:'rgba(120,160,255,0.08)'},border:{color:'rgba(120,160,255,0.1)'}}}}});
+}
+
 function renderVideosPage(){
   const videos=getFiltered();
   const col=document.getElementById('sortSelect').value||sortCol;sortCol=col;
