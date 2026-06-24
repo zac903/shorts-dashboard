@@ -125,6 +125,13 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <input class="api-input" type="text" id="igAccount" placeholder="Instagram account ID (e.g. 17841408305332766)"/>
     </div>
 
+    <div class="divider-line"></div>
+
+    <div class="setup-section">
+      <div class="setup-section-label"><span class="nav-dot" style="background:#ffe01b;"></span> Mailchimp</div>
+      <input class="api-input" type="password" id="mcKey" placeholder="Mailchimp API key (ends in -us7)" autocomplete="off"/>
+    </div>
+
     <button class="btn-load" onclick="setup()">Connect & load everything →</button>
     <p class="hint">All credentials stored in your browser only. You can connect just one platform if you prefer.</p>
     <div class="token-warn">⏱ Instagram tokens expire after ~60 days. When Instagram stops updating, generate a new long-lived token and paste it via Settings.</div>
@@ -148,6 +155,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <button class="nav-item active" onclick="setFilter('all',this)"><span class="nav-dot dot-all"></span> All platforms</button>
       <button class="nav-item" onclick="setFilter('youtube',this)"><span class="nav-dot dot-yt"></span> YouTube Shorts</button>
       <button class="nav-item" onclick="setFilter('instagram',this)"><span class="nav-dot dot-ig"></span> Instagram Reels</button>
+      <button class="nav-item" onclick="showPage('email')"><span class="nav-dot" style="background:#ffe01b;"></span> Email (Mailchimp)</button>
       <div class="nav-section">Views</div>
       <button class="nav-item" onclick="showPage('overview')">📈 Overview</button>
       <button class="nav-item" onclick="showPage('compare')">⚖️ Compare</button>
@@ -218,6 +226,24 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
             <div style="position:relative;height:220px;"><canvas id="cadenceChart"></canvas></div>
           </div>
         </div>
+        <div id="page-email" style="display:none;">
+          <div class="metric-grid" id="emailMetrics"></div>
+          <div class="chart-card">
+            <div class="chart-label">Open rate per campaign</div>
+            <div style="position:relative;height:240px;"><canvas id="emailOpenChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label">Click rate per campaign</div>
+            <div style="position:relative;height:240px;"><canvas id="emailClickChart"></canvas></div>
+          </div>
+          <div class="chart-card" style="overflow-x:auto;">
+            <div class="chart-label">All campaigns</div>
+            <table class="video-table">
+              <thead><tr><th>Subject</th><th>Sent date</th><th>Emails sent</th><th>Opens</th><th>Open %</th><th>Clicks</th><th>Click %</th></tr></thead>
+              <tbody id="emailTableBody"></tbody>
+            </table>
+          </div>
+        </div>
         <div id="page-followers" style="display:none;">
           <div class="metric-grid" id="followerMetrics"></div>
           <div class="chart-card">
@@ -266,7 +292,9 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
 <script>
 const CHANNEL_ID = 'UCH6Y34ndSHpQ5chh0bk6Iqg';
 const IG_VERSION = 'v25.0';
-let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='';
+const MC_PROXY = 'https://mailchimp-proxy.epcoachscheme.workers.dev';
+const MC_DC = 'us7';
+let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='', MC_KEY='';
 let charts={};
 let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all';
 
@@ -327,10 +355,12 @@ async function setup(){
   const ytKey=document.getElementById('ytKey').value.trim();
   const igToken=document.getElementById('igToken').value.trim();
   const igAccount=document.getElementById('igAccount').value.trim();
-  if(!ytKey && !igToken){showErr('Enter at least one platform.');return;}
-  YT_KEY=ytKey; IG_TOKEN=igToken; IG_ACCOUNT=igAccount;
+  const mcKey=document.getElementById('mcKey').value.trim();
+  if(!ytKey && !igToken && !mcKey){showErr('Enter at least one platform.');return;}
+  YT_KEY=ytKey; IG_TOKEN=igToken; IG_ACCOUNT=igAccount; MC_KEY=mcKey;
   if(ytKey)localStorage.setItem('yt_key',ytKey);
   if(igToken){localStorage.setItem('ig_token',igToken);localStorage.setItem('ig_account',igAccount);}
+  if(mcKey)localStorage.setItem('mc_key',mcKey);
   document.getElementById('setupError').style.display='none';
   await refreshAll();
 }
@@ -339,6 +369,7 @@ async function refreshAll(){
   YT_KEY=YT_KEY||localStorage.getItem('yt_key')||'';
   IG_TOKEN=IG_TOKEN||localStorage.getItem('ig_token')||'';
   IG_ACCOUNT=IG_ACCOUNT||localStorage.getItem('ig_account')||'';
+  MC_KEY=MC_KEY||localStorage.getItem('mc_key')||'';
   show('loadingView');
   let errors=[];
   try{
@@ -349,6 +380,10 @@ async function refreshAll(){
     if(IG_TOKEN && IG_ACCOUNT){
       setLoading('Fetching Instagram Reels...');
       try{ await fetchIG(); }catch(e){ errors.push('Instagram: '+e.message); }
+    }
+    if(MC_KEY){
+      setLoading('Fetching Mailchimp campaigns...');
+      try{ await fetchMC(); }catch(e){ errors.push('Mailchimp: '+e.message); }
     }
     document.getElementById('lastUpdated').textContent='Updated '+new Date().toLocaleTimeString();
     show('appView');
@@ -456,7 +491,37 @@ async function igMetric(mediaId, metric){
   return 0;
 }
 
-// ---- NAV ----
+// ---- MAILCHIMP (via Cloudflare proxy to avoid CORS) ----
+async function mcFetch(path){
+  const url=`${MC_PROXY}?path=${encodeURIComponent(path)}&dc=${MC_DC}&key=${encodeURIComponent(MC_KEY)}`;
+  const r=await fetch(url);
+  const d=await r.json();
+  if(d.error||d.status==='error'||d.title)throw new Error(d.detail||d.title||d.error||'Mailchimp error');
+  return d;
+}
+async function fetchMC(){
+  // Campaigns with stats
+  const camp=await mcFetch('campaigns?count=100&sort_field=send_time&sort_dir=DESC&status=sent');
+  const campaigns=(camp.campaigns||[]).map(c=>({
+    id:c.id,
+    title:(c.settings&&c.settings.subject_line)||(c.settings&&c.settings.title)||'Untitled campaign',
+    sendTime:(c.send_time||'').slice(0,10),
+    emailsSent:c.emails_sent||0,
+    opens:(c.report_summary&&c.report_summary.unique_opens)||0,
+    openRate:(c.report_summary&&c.report_summary.open_rate)?+(c.report_summary.open_rate*100).toFixed(1):0,
+    clicks:(c.report_summary&&c.report_summary.subscriber_clicks)||0,
+    clickRate:(c.report_summary&&c.report_summary.click_rate)?+(c.report_summary.click_rate*100).toFixed(1):0
+  }));
+  localStorage.setItem('mc_campaigns',JSON.stringify(campaigns));
+
+  // Audience / list growth - record total subscribers across all lists
+  try{
+    const lists=await mcFetch('lists?count=50');
+    let totalSubs=0;
+    for(const l of (lists.lists||[])){ totalSubs+=(l.stats&&l.stats.member_count)||0; }
+    if(totalSubs)recordFollowers('mailchimp',totalSubs);
+  }catch(e){}
+}
 function setFilter(f,el){
   currentFilter=f;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -467,7 +532,7 @@ function setFilter(f,el){
 }
 function showPage(p){
   currentPage=p;
-  ['overview','compare','growth','followers','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg===p?'block':'none');
+  ['overview','compare','growth','followers','email','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg===p?'block':'none');
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
@@ -478,8 +543,8 @@ function openSettings(){
   if(t&&t.trim()){localStorage.setItem('ig_token',t.trim());IG_TOKEN=t.trim();alert('Token updated. Click Refresh to reload Instagram.');}
 }
 function logout(){
-  ['yt_key','yt_videos','ig_token','ig_account','ig_videos'].forEach(k=>localStorage.removeItem(k));
-  YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';
+  ['yt_key','yt_videos','ig_token','ig_account','ig_videos','mc_key','mc_campaigns','followers_mailchimp'].forEach(k=>localStorage.removeItem(k));
+  YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';
   Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
   show('setupView');
 }
@@ -493,6 +558,7 @@ function renderAll(){
   if(currentPage==='compare')renderCompare();
   if(currentPage==='growth')renderGrowth(videos);
   if(currentPage==='followers')renderFollowers();
+  if(currentPage==='email')renderEmail();
   if(currentPage==='videos')renderVideosPage();
 }
 function renderMetrics(videos){
@@ -545,19 +611,20 @@ function renderGrowth(videos){
   mk('cadenceChart','bar',months,months.map(m=>mm[m]),'#fb923c');
 }
 function renderFollowers(){
-  const ytNow=latestFollowers('youtube'), igNow=latestFollowers('instagram');
-  const ytHist=getFollowerHistory('youtube'), igHist=getFollowerHistory('instagram');
-  const ytFirst=ytHist.length?ytHist[0].count:0, igFirst=igHist.length?igHist[0].count:0;
-  const ytGain=ytNow-ytFirst, igGain=igNow-igFirst;
-  const total=ytNow+igNow, totalGain=ytGain+igGain;
+  const ytNow=latestFollowers('youtube'), igNow=latestFollowers('instagram'), mcNow=latestFollowers('mailchimp');
+  const ytHist=getFollowerHistory('youtube'), igHist=getFollowerHistory('instagram'), mcHist=getFollowerHistory('mailchimp');
+  const ytFirst=ytHist.length?ytHist[0].count:0, igFirst=igHist.length?igHist[0].count:0, mcFirst=mcHist.length?mcHist[0].count:0;
+  const ytGain=ytNow-ytFirst, igGain=igNow-igFirst, mcGain=mcNow-mcFirst;
+  const total=ytNow+igNow+mcNow, totalGain=ytGain+igGain+mcGain;
   document.getElementById('followerMetrics').innerHTML=`
-    <div class="metric-card"><div class="metric-label">Total followers</div><div class="metric-value">${fmt(total)}</div><div class="metric-sub">${totalGain>=0?'+':''}${fmt(totalGain)} since tracking</div></div>
+    <div class="metric-card"><div class="metric-label">Total audience</div><div class="metric-value">${fmt(total)}</div><div class="metric-sub">${totalGain>=0?'+':''}${fmt(totalGain)} since tracking</div></div>
     <div class="metric-card"><div class="metric-label">YouTube subscribers</div><div class="metric-value c-yt">${fmt(ytNow)}</div><div class="metric-sub">${ytGain>=0?'+':''}${fmt(ytGain)} tracked</div></div>
-    <div class="metric-card"><div class="metric-label">Instagram followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain>=0?'+':''}${fmt(igGain)} tracked</div></div>`;
-  // Merge dates from both platforms
-  const allDates=[...new Set([...ytHist.map(h=>h.date),...igHist.map(h=>h.date)])].sort();
+    <div class="metric-card"><div class="metric-label">Instagram followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain>=0?'+':''}${fmt(igGain)} tracked</div></div>
+    <div class="metric-card"><div class="metric-label">Email subscribers</div><div class="metric-value" style="color:#ffe01b;">${fmt(mcNow)}</div><div class="metric-sub">${mcGain>=0?'+':''}${fmt(mcGain)} tracked</div></div>`;
+  const allDates=[...new Set([...ytHist.map(h=>h.date),...igHist.map(h=>h.date),...mcHist.map(h=>h.date)])].sort();
   const ytMap=Object.fromEntries(ytHist.map(h=>[h.date,h.count]));
   const igMap=Object.fromEntries(igHist.map(h=>[h.date,h.count]));
+  const mcMap=Object.fromEntries(mcHist.map(h=>[h.date,h.count]));
   if(charts['followerChart']){try{charts['followerChart'].destroy();}catch(e){}}
   const ctx=document.getElementById('followerChart');
   if(!ctx)return;
@@ -565,9 +632,44 @@ function renderFollowers(){
   charts['followerChart']=new Chart(ctx,{type:'line',
     data:{labels:allDates,datasets:[
       {label:'YouTube',data:allDates.map(d=>ytMap[d]??null),borderColor:'#ff4d4d',backgroundColor:'#ff4d4d22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true},
-      {label:'Instagram',data:allDates.map(d=>igMap[d]??null),borderColor:'#e1306c',backgroundColor:'#e1306c22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true}
+      {label:'Instagram',data:allDates.map(d=>igMap[d]??null),borderColor:'#e1306c',backgroundColor:'#e1306c22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true},
+      {label:'Email',data:allDates.map(d=>mcMap[d]??null),borderColor:'#ffe01b',backgroundColor:'#ffe01b22',borderWidth:2,tension:0.3,pointRadius:3,spanGaps:true}
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#9fb3d9',font:{size:12},padding:16}}},scales:{x:{ticks:{color:'#7088b5',font:{size:10}},grid:{display:false},border:{color:'rgba(120,160,255,0.1)'}},y:{ticks:{color:'#7088b5',font:{size:11},callback:v=>fmt(v)},grid:{color:'rgba(120,160,255,0.08)'},border:{color:'rgba(120,160,255,0.1)'}}}}});
+}
+
+function renderEmail(){
+  const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
+  if(!camps.length){
+    document.getElementById('emailMetrics').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted);">No Mailchimp data yet. Add your API key in Settings and click Refresh.</div>`;
+    document.getElementById('emailTableBody').innerHTML='';
+    return;
+  }
+  const totalSent=camps.reduce((s,c)=>s+c.emailsSent,0);
+  const totalOpens=camps.reduce((s,c)=>s+c.opens,0);
+  const totalClicks=camps.reduce((s,c)=>s+c.clicks,0);
+  const avgOpen=camps.length?(camps.reduce((s,c)=>s+c.openRate,0)/camps.length).toFixed(1):0;
+  const avgClick=camps.length?(camps.reduce((s,c)=>s+c.clickRate,0)/camps.length).toFixed(1):0;
+  const subs=latestFollowers('mailchimp');
+  document.getElementById('emailMetrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Campaigns sent</div><div class="metric-value">${camps.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Subscribers</div><div class="metric-value" style="color:#ffe01b;">${fmt(subs)}</div></div>
+    <div class="metric-card"><div class="metric-label">Total emails sent</div><div class="metric-value c-blue">${fmt(totalSent)}</div></div>
+    <div class="metric-card"><div class="metric-label">Avg open rate</div><div class="metric-value c-green">${avgOpen}%</div></div>
+    <div class="metric-card"><div class="metric-label">Avg click rate</div><div class="metric-value c-purple">${avgClick}%</div></div>
+    <div class="metric-card"><div class="metric-label">Total opens</div><div class="metric-value c-yellow">${fmt(totalOpens)}</div></div>`;
+  const ordered=[...camps].sort((a,b)=>new Date(a.sendTime)-new Date(b.sendTime));
+  const labels=ordered.map(c=>c.title.length>16?c.title.slice(0,14)+'…':c.title);
+  mk('emailOpenChart','bar',labels,ordered.map(c=>c.openRate),'#4ade80');
+  mk('emailClickChart','bar',labels,ordered.map(c=>c.clickRate),'#a78bfa');
+  document.getElementById('emailTableBody').innerHTML=[...camps].sort((a,b)=>new Date(b.sendTime)-new Date(a.sendTime)).map(c=>`
+    <tr><td title="${c.title}">${c.title.length>44?c.title.slice(0,42)+'…':c.title}</td>
+    <td style="color:var(--muted);white-space:nowrap;">${c.sendTime||'—'}</td>
+    <td style="font-family:var(--mono);">${fmt(c.emailsSent)}</td>
+    <td style="font-family:var(--mono);">${fmt(c.opens)}</td>
+    <td><span class="eng-badge ${c.openRate>=30?'eg':c.openRate>=15?'ea':'er'}">${c.openRate}%</span></td>
+    <td style="font-family:var(--mono);">${fmt(c.clicks)}</td>
+    <td><span class="eng-badge ${c.clickRate>=5?'eg':c.clickRate>=2?'ea':'er'}">${c.clickRate}%</span></td></tr>`).join('');
 }
 
 function renderVideosPage(){
@@ -622,14 +724,14 @@ function bars(id,labels,data,colors){
 function fmt(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'K';return String(n||0);}
 
 (function init(){
-  const yk=localStorage.getItem('yt_key'),it=localStorage.getItem('ig_token');
-  const yv=localStorage.getItem('yt_videos'),iv=localStorage.getItem('ig_videos');
-  if(yk)YT_KEY=yk;if(it){IG_TOKEN=it;IG_ACCOUNT=localStorage.getItem('ig_account')||'';}
-  if((yk||it)&&(yv||iv)){
+  const yk=localStorage.getItem('yt_key'),it=localStorage.getItem('ig_token'),mk=localStorage.getItem('mc_key');
+  const yv=localStorage.getItem('yt_videos'),iv=localStorage.getItem('ig_videos'),mv=localStorage.getItem('mc_campaigns');
+  if(yk)YT_KEY=yk;if(it){IG_TOKEN=it;IG_ACCOUNT=localStorage.getItem('ig_account')||'';}if(mk)MC_KEY=mk;
+  if((yk||it||mk)&&(yv||iv||mv)){
     show('appView');
     document.getElementById('lastUpdated').textContent='Cached — click Refresh to update';
     renderAll();
-  }else if(yk||it){
+  }else if(yk||it||mk){
     refreshAll();
   }
 })();
