@@ -504,20 +504,44 @@ async function mcFetch(path){
   return d;
 }
 async function fetchMC(){
-  // Campaigns with stats
+  // Campaigns list (subject, send time, basic stats)
   const camp=await mcFetch('campaigns?count=100&sort_field=send_time&sort_dir=DESC&status=sent');
-  const campaigns=(camp.campaigns||[]).map(c=>({
-    id:c.id,
-    title:(c.settings&&c.settings.subject_line)||(c.settings&&c.settings.title)||'Untitled campaign',
-    sendTime:(c.send_time||'').slice(0,10),
-    emailsSent:c.emails_sent||0,
-    opens:(c.report_summary&&c.report_summary.unique_opens)||0,
-    openRate:(c.report_summary&&c.report_summary.open_rate)?+(c.report_summary.open_rate*100).toFixed(1):0,
-    clicks:(c.report_summary&&c.report_summary.subscriber_clicks)||0,
-    clickRate:(c.report_summary&&c.report_summary.click_rate)?+(c.report_summary.click_rate*100).toFixed(1):0,
-    revenue:(c.report_summary&&c.report_summary.ecommerce&&c.report_summary.ecommerce.total_revenue)||0,
-    orders:(c.report_summary&&c.report_summary.ecommerce&&c.report_summary.ecommerce.total_orders)||0
-  }));
+
+  // Reports endpoint carries the reliable ecommerce/revenue figures.
+  // Build a lookup of campaign id -> revenue/orders so we can merge it in.
+  let revMap={};
+  try{
+    const rep=await mcFetch('reports?count=200');
+    for(const r of (rep.reports||[])){
+      const ec=r.ecommerce||{};
+      revMap[r.id]={
+        revenue: ec.total_revenue||0,
+        orders: ec.total_orders||0,
+        opens:(r.opens&&r.opens.unique_opens)||0,
+        openRate:(r.opens&&r.opens.open_rate)?+(r.opens.open_rate*100).toFixed(1):0,
+        clicks:(r.clicks&&r.clicks.unique_subscriber_clicks)||0,
+        clickRate:(r.clicks&&r.clicks.click_rate)?+(r.clicks.click_rate*100).toFixed(1):0
+      };
+    }
+  }catch(e){}
+
+  const campaigns=(camp.campaigns||[]).map(c=>{
+    const r=revMap[c.id]||{};
+    const sum=c.report_summary||{};
+    const sumEc=sum.ecommerce||{};
+    return {
+      id:c.id,
+      title:(c.settings&&c.settings.subject_line)||(c.settings&&c.settings.title)||'Untitled campaign',
+      sendTime:(c.send_time||'').slice(0,10),
+      emailsSent:c.emails_sent||0,
+      opens: r.opens || sum.unique_opens || 0,
+      openRate: r.openRate || (sum.open_rate?+(sum.open_rate*100).toFixed(1):0),
+      clicks: r.clicks || sum.subscriber_clicks || 0,
+      clickRate: r.clickRate || (sum.click_rate?+(sum.click_rate*100).toFixed(1):0),
+      revenue: r.revenue || sumEc.total_revenue || 0,
+      orders: r.orders || sumEc.total_orders || 0
+    };
+  });
   localStorage.setItem('mc_campaigns',JSON.stringify(campaigns));
 
   // Audience / list growth - record total subscribers across all lists
@@ -534,17 +558,28 @@ function setFilter(f,el){
   el.classList.add('active');
   const t={all:'All Platforms',youtube:'YouTube Shorts',instagram:'Instagram Reels'};
   document.getElementById('topbarTitle').textContent=t[f];
-  // If currently on the Email page (or any non-video page), switching platform
-  // should bring you back to Overview so you actually see that platform's data.
-  if(currentPage==='email'){
-    currentPage='overview';
-    ['overview','compare','growth','followers','email','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg==='overview'?'block':'none');
-  }
+  // Always land on Overview when switching platform, so you never stay stuck
+  // on the Email (or any other) page showing the wrong thing.
+  currentPage='overview';
+  ['overview','compare','growth','followers','email','videos'].forEach(pg=>{
+    const elp=document.getElementById('page-'+pg);
+    if(elp)elp.style.display=pg==='overview'?'block':'none';
+  });
   renderAll();
 }
 function showPage(p){
   currentPage=p;
-  ['overview','compare','growth','followers','email','videos'].forEach(pg=>document.getElementById('page-'+pg).style.display=pg===p?'block':'none');
+  ['overview','compare','growth','followers','email','videos'].forEach(pg=>{
+    const elp=document.getElementById('page-'+pg);
+    if(elp)elp.style.display=pg===p?'block':'none';
+  });
+  // Email behaves like its own section - highlight it and clear platform buttons
+  if(p==='email'){
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const emailNav=[...document.querySelectorAll('.nav-item')].find(n=>n.textContent.includes('Email'));
+    if(emailNav)emailNav.classList.add('active');
+    document.getElementById('topbarTitle').textContent='Email (Mailchimp)';
+  }
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
