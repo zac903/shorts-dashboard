@@ -307,12 +307,16 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
           </div>
         </div>
         <div id="page-report" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1.5rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
             <div>
               <div style="font-size:18px;font-weight:600;" id="reportTitle">Weekly Analysis Report</div>
               <div style="font-size:13px;color:var(--muted);" id="reportDates"></div>
             </div>
             <button class="btn btn-primary" onclick="window.print()">⎙ Print / Save PDF</button>
+          </div>
+          <div class="filter-bar" style="margin-bottom:1.5rem;">
+            <span class="filter-label">Week:</span>
+            <select class="sort-select" id="weekSelect" onchange="renderReport()"></select>
           </div>
           <div id="reportBody"></div>
         </div>
@@ -994,71 +998,89 @@ function renderStoreProducts(){
     </td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No ${prodType==='all'?'product':prodType} data for this period.</td></tr>`;
 }
 
-function renderReport(){
-  const body=document.getElementById('reportBody');
-  // Date range: most recent Friday back to the Friday before
+function buildWeekOptions(){
+  // Build list of selectable weeks: current (in-progress) + past 12 completed weeks.
+  const opts=[];
   const now=new Date();
-  const day=now.getDay(); // 0 Sun .. 5 Fri
+  const day=now.getDay();
   const daysSinceFri=(day-5+7)%7;
   const lastFri=new Date(now); lastFri.setDate(now.getDate()-daysSinceFri); lastFri.setHours(0,0,0,0);
-  const prevFri=new Date(lastFri); prevFri.setDate(lastFri.getDate()-7);
+  // Current in-progress week: from lastFri to now
+  opts.push({key:'current',start:new Date(lastFri),end:new Date(now),label:'Current week (in progress)'});
+  // Completed weeks going back
+  for(let i=0;i<12;i++){
+    const end=new Date(lastFri); end.setDate(lastFri.getDate()-7*i);
+    const start=new Date(end); start.setDate(end.getDate()-7);
+    const fmtD=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const label=(i===0?'Last week · ':'')+`${fmtD(start)} – ${fmtD(end)}`;
+    opts.push({key:'w'+i,start,end,label});
+  }
+  return opts;
+}
+function renderReport(){
+  const sel=document.getElementById('weekSelect');
+  const opts=buildWeekOptions();
+  // populate dropdown once
+  if(sel.options.length!==opts.length){
+    sel.innerHTML=opts.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('');
+    sel.value='1'; // default to "Last week" (first completed week)
+  }
+  const chosen=opts[+sel.value||0];
+  const wStart=chosen.start, wEnd=chosen.end;
   const fmtDate=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-  document.getElementById('reportDates').textContent=`${fmtDate(prevFri)} – ${fmtDate(lastFri)}, ${lastFri.getFullYear()}`;
+  document.getElementById('reportDates').textContent=`${fmtDate(wStart)} – ${fmtDate(wEnd)}, ${wEnd.getFullYear()}${chosen.key==='current'?' · so far':''}`;
 
-  // ---- Gather data ----
+  const body=document.getElementById('reportBody');
   const d=getData();
   const allVids=[...d.youtube,...d.instagram];
-  const inWeek=v=>{ if(!v.published)return false; const dt=new Date(v.published); return dt>=prevFri && dt<lastFri; };
+  const inWeek=v=>{ if(!v.published)return false; const dt=new Date(v.published); return dt>=wStart && dt<wEnd; };
   const weekVids=allVids.filter(inWeek);
-  const ytWeek=weekVids.filter(v=>v.platform==='youtube');
-  const igWeek=weekVids.filter(v=>v.platform==='instagram');
   const weekViews=weekVids.reduce((s,v)=>s+v.views,0);
 
-  // Followers
   const igNow=latestFollowers('instagram'), ytNow=latestFollowers('youtube'), mcNow=latestFollowers('mailchimp');
   const histGain=(plat)=>{const h=getFollowerHistory(plat);if(h.length<2)return null;
-    // find entry closest to prevFri and to now
     const sorted=[...h].sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const before=sorted.filter(e=>new Date(e.date)<=prevFri).pop()||sorted[0];
-    const after=sorted[sorted.length-1];
+    const before=sorted.filter(e=>new Date(e.date)<=wStart).pop();
+    const after=sorted.filter(e=>new Date(e.date)<=wEnd).pop();
+    if(!before||!after)return null;
     return after.count-before.count;};
   const igGain=histGain('instagram'), ytGain=histGain('youtube'), mcGain=histGain('mailchimp');
 
-  // Store - this week sales
   const woo=JSON.parse(localStorage.getItem('woo_data')||'null');
-  const wk=woo&&woo.periods&&woo.periods.week?woo.periods.week:null;
+  // Use the woo 'week' period only when reporting the current/last week; otherwise note unavailable
+  const isRecent=(chosen.key==='current'||chosen.key==='w0');
+  const wk=(isRecent&&woo&&woo.periods&&woo.periods.week)?woo.periods.week:null;
   const weekSales=wk?wk.totalSales:0, weekOrders=wk?wk.totalOrders:0;
   const aov=weekOrders>0?weekSales/weekOrders:0;
 
-  // Email - campaigns sent this week
   const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
-  const weekCamps=camps.filter(c=>{if(!c.sendTime)return false;const dt=new Date(c.sendTime);return dt>=prevFri&&dt<lastFri;});
+  const weekCamps=camps.filter(c=>{if(!c.sendTime)return false;const dt=new Date(c.sendTime);return dt>=wStart&&dt<wEnd;});
   const campRevenue=weekCamps.reduce((s,c)=>s+(Number(c.revenue)||0),0);
-
-  // Top video of the week
   const topVid=[...weekVids].sort((a,b)=>b.views-a.views)[0];
 
-  // ---- Auto commentary ----
   const wins=[], improves=[], next=[];
   if(topVid)wins.push(`Top content: "${topVid.title}" pulled ${fmt(topVid.views)} views on ${topVid.platform==='youtube'?'YouTube':'Instagram'}.`);
   if(weekSales>0)wins.push(`Store generated ${money(weekSales)} across ${fmt(weekOrders)} orders (avg ${money(aov)}/order).`);
-  if(igGain!==null&&igGain>0)wins.push(`Instagram following grew by ${fmt(igGain)} this week.`);
+  if(igGain!==null&&igGain>0)wins.push(`Instagram following grew by ${fmt(igGain)}.`);
   if(ytGain!==null&&ytGain>0)wins.push(`YouTube subscribers up ${fmt(ytGain)}.`);
   if(mcGain!==null&&mcGain>0)wins.push(`Email list grew by ${fmt(mcGain)} subscribers.`);
   if(campRevenue>0)wins.push(`Email campaigns drove ${money(campRevenue)} in tracked revenue.`);
   if(weekVids.length>=3)wins.push(`Strong publishing cadence — ${weekVids.length} pieces of content went out.`);
 
-  if(weekVids.length===0)improves.push(`No new content was published this week — consistency drives reach.`);
-  else if(weekVids.length<3)improves.push(`Only ${weekVids.length} piece(s) of content this week; aim for 3+ to keep momentum.`);
+  if(weekVids.length===0)improves.push(`No new content published in this window — consistency drives reach.`);
+  else if(weekVids.length<3)improves.push(`Only ${weekVids.length} piece(s) of content; aim for 3+ to keep momentum.`);
   if(igGain!==null&&igGain<=0)improves.push(`Instagram following was flat or down — review which Reels underperformed.`);
-  if(weekCamps.length===0)improves.push(`No email campaigns sent this week — a regular send keeps the list warm and drives sales.`);
+  if(weekCamps.length===0)improves.push(`No email campaigns sent — a regular send keeps the list warm and drives sales.`);
   const lowVid=[...weekVids].sort((a,b)=>a.views-b.views)[0];
   if(lowVid&&weekVids.length>1)improves.push(`Lowest performer "${lowVid.title}" (${fmt(lowVid.views)} views) — worth analysing what differed.`);
 
-  next.push(`Publish at least 3 pieces of content, leaning into your best-performing formats (numbered tips, racket comparisons, fast action clips on Instagram).`);
-  if(weekCamps.length===0)next.push(`Send at least one email campaign — tie it to a product push to drive store revenue.`);
+  next.push(`Publish at least 3 pieces of content, leaning into your best formats (numbered tips, racket comparisons, fast action clips on Instagram).`);
+  if(weekCamps.length===0)next.push(`Send at least one email campaign tied to a product push to drive store revenue.`);
   if(topVid)next.push(`Make a follow-up to "${topVid.title}" while the topic has momentum.`);
-  next.push(`Review best-selling products and feature them in content and email.`);
+  next.push(`Feature this week's best-selling products in content and email.`);
+
+  const salesCard = (isRecent||weekSales>0) ? `${money(weekSales)}` : '—';
+  const salesSub = isRecent ? `${fmt(weekOrders)} orders` : 'select recent week';
 
   const liItems=(arr)=>arr.map(t=>`<li style="margin-bottom:6px;line-height:1.5;">${t}</li>`).join('');
   const sectionCard=(title,colour,inner)=>`<div class="chart-card"><div class="chart-label" style="color:${colour};">${title}</div>${inner}</div>`;
@@ -1066,16 +1088,17 @@ function renderReport(){
   body.innerHTML=`
     <div class="metric-grid">
       <div class="metric-card"><div class="metric-label">Content views</div><div class="metric-value c-blue">${fmt(weekViews)}</div><div class="metric-sub">${weekVids.length} posts</div></div>
-      <div class="metric-card"><div class="metric-label">Store sales</div><div class="metric-value c-green">${money(weekSales)}</div><div class="metric-sub">${fmt(weekOrders)} orders</div></div>
-      <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${money(aov)}</div></div>
-      <div class="metric-card"><div class="metric-label">IG followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain!==null?(igGain>=0?'+':'')+fmt(igGain)+' this wk':'tracking'}</div></div>
-      <div class="metric-card"><div class="metric-label">YT subscribers</div><div class="metric-value c-yt">${fmt(ytNow)}</div><div class="metric-sub">${ytGain!==null?(ytGain>=0?'+':'')+fmt(ytGain)+' this wk':'tracking'}</div></div>
-      <div class="metric-card"><div class="metric-label">Email list</div><div class="metric-value" style="color:#ffe01b;">${fmt(mcNow)}</div><div class="metric-sub">${mcGain!==null?(mcGain>=0?'+':'')+fmt(mcGain)+' this wk':'tracking'}</div></div>
+      <div class="metric-card"><div class="metric-label">Store sales</div><div class="metric-value c-green">${salesCard}</div><div class="metric-sub">${salesSub}</div></div>
+      <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${isRecent?money(aov):'—'}</div></div>
+      <div class="metric-card"><div class="metric-label">IG followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain!==null?(igGain>=0?'+':'')+fmt(igGain):'—'}</div></div>
+      <div class="metric-card"><div class="metric-label">YT subscribers</div><div class="metric-value c-yt">${fmt(ytNow)}</div><div class="metric-sub">${ytGain!==null?(ytGain>=0?'+':'')+fmt(ytGain):'—'}</div></div>
+      <div class="metric-card"><div class="metric-label">Email list</div><div class="metric-value" style="color:#ffe01b;">${fmt(mcNow)}</div><div class="metric-sub">${mcGain!==null?(mcGain>=0?'+':'')+fmt(mcGain):'—'}</div></div>
     </div>
+    ${!isRecent?`<div class="chart-card" style="font-size:12px;color:var(--muted);">Store sales shown only for the current/last week (live store data covers the recent period). Content, email and follower figures are accurate for any week you've been tracking.</div>`:''}
     ${sectionCard('✅ What went well','#4ade80',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(wins.length?wins:['Add data by refreshing to populate this section.'])}</ul>`)}
     ${sectionCard('⚠️ What could be better','#fbbf24',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(improves.length?improves:['Nothing flagged — solid week across the board.'])}</ul>`)}
     ${sectionCard('🎯 What to do next week','#5b9bff',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(next)}</ul>`)}
-    <div class="chart-card" style="font-size:12px;color:var(--muted);">Commentary is auto-generated from this week's data trends. Edit freely before sharing — you know the context behind the numbers.</div>
+    <div class="chart-card" style="font-size:12px;color:var(--muted);">Commentary is auto-generated from the selected week's data. Edit freely before sharing.</div>
   `;
 }
 
