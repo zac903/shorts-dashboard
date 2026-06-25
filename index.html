@@ -338,15 +338,18 @@ function getFiltered(){
   return applyDateRange(vids);
 }
 function applyDateRange(vids){
-  if(dateRange==='all')return vids;
+  return applyDateRangeGeneric(vids,'published');
+}
+function applyDateRangeGeneric(items,dateField){
+  if(dateRange==='all')return items;
   const now=new Date();
   let cutoff;
   if(dateRange==='week'){cutoff=new Date(now);cutoff.setDate(now.getDate()-7);}
   else if(dateRange==='month'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-1);}
   else if(dateRange==='3months'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-3);}
   else if(dateRange==='year'){cutoff=new Date(now);cutoff.setFullYear(now.getFullYear()-1);}
-  else return vids;
-  return vids.filter(v=>v.published && new Date(v.published)>=cutoff);
+  else return items;
+  return items.filter(v=>v[dateField] && new Date(v[dateField])>=cutoff);
 }
 function setDateRange(r,el){
   dateRange=r;
@@ -515,12 +518,12 @@ async function fetchMC(){
     for(const r of (rep.reports||[])){
       const ec=r.ecommerce||{};
       revMap[r.id]={
-        revenue: ec.total_revenue||0,
-        orders: ec.total_orders||0,
-        opens:(r.opens&&r.opens.unique_opens)||0,
-        openRate:(r.opens&&r.opens.open_rate)?+(r.opens.open_rate*100).toFixed(1):0,
-        clicks:(r.clicks&&r.clicks.unique_subscriber_clicks)||0,
-        clickRate:(r.clicks&&r.clicks.click_rate)?+(r.clicks.click_rate*100).toFixed(1):0
+        revenue: Number(ec.total_revenue)||0,
+        orders: Number(ec.total_orders)||0,
+        opens:(r.opens&&Number(r.opens.unique_opens))||0,
+        openRate:(r.opens&&r.opens.open_rate)?+(Number(r.opens.open_rate)*100).toFixed(1):0,
+        clicks:(r.clicks&&Number(r.clicks.unique_subscriber_clicks))||0,
+        clickRate:(r.clicks&&r.clicks.click_rate)?+(Number(r.clicks.click_rate)*100).toFixed(1):0
       };
     }
   }catch(e){}
@@ -533,13 +536,13 @@ async function fetchMC(){
       id:c.id,
       title:(c.settings&&c.settings.subject_line)||(c.settings&&c.settings.title)||'Untitled campaign',
       sendTime:(c.send_time||'').slice(0,10),
-      emailsSent:c.emails_sent||0,
-      opens: r.opens || sum.unique_opens || 0,
-      openRate: r.openRate || (sum.open_rate?+(sum.open_rate*100).toFixed(1):0),
-      clicks: r.clicks || sum.subscriber_clicks || 0,
-      clickRate: r.clickRate || (sum.click_rate?+(sum.click_rate*100).toFixed(1):0),
-      revenue: r.revenue || sumEc.total_revenue || 0,
-      orders: r.orders || sumEc.total_orders || 0
+      emailsSent:Number(c.emails_sent)||0,
+      opens: r.opens || Number(sum.unique_opens) || 0,
+      openRate: r.openRate || (sum.open_rate?+(Number(sum.open_rate)*100).toFixed(1):0),
+      clicks: r.clicks || Number(sum.subscriber_clicks) || 0,
+      clickRate: r.clickRate || (sum.click_rate?+(Number(sum.click_rate)*100).toFixed(1):0),
+      revenue: r.revenue || Number(sumEc.total_revenue) || 0,
+      orders: r.orders || Number(sumEc.total_orders) || 0
     };
   });
   localStorage.setItem('mc_campaigns',JSON.stringify(campaigns));
@@ -686,7 +689,9 @@ function renderFollowers(){
 }
 
 function renderEmail(){
-  const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
+  let camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
+  // Apply the active time-period filter to campaigns by their send date
+  camps=applyDateRangeGeneric(camps,'sendTime');
   if(!camps.length){
     document.getElementById('emailMetrics').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted);">No Mailchimp data yet. Add your API key in Settings and click Refresh.</div>`;
     document.getElementById('emailTableBody').innerHTML='';
@@ -695,8 +700,8 @@ function renderEmail(){
   const totalSent=camps.reduce((s,c)=>s+c.emailsSent,0);
   const totalOpens=camps.reduce((s,c)=>s+c.opens,0);
   const totalClicks=camps.reduce((s,c)=>s+c.clicks,0);
-  const totalRevenue=camps.reduce((s,c)=>s+(c.revenue||0),0);
-  const totalOrders=camps.reduce((s,c)=>s+(c.orders||0),0);
+  const totalRevenue=camps.reduce((s,c)=>s+(Number(c.revenue)||0),0);
+  const totalOrders=camps.reduce((s,c)=>s+(Number(c.orders)||0),0);
   const avgOpen=camps.length?(camps.reduce((s,c)=>s+c.openRate,0)/camps.length).toFixed(1):0;
   const avgClick=camps.length?(camps.reduce((s,c)=>s+c.clickRate,0)/camps.length).toFixed(1):0;
   const subs=latestFollowers('mailchimp');
