@@ -637,10 +637,26 @@ async function fetchWoo(){
       topByPeriod[p]=(ts||[]).map(t=>({name:t.name,productId:t.product_id,quantity:Number(t.quantity)||0}));
     }catch(e){ topByPeriod[p]=[]; }
   }
+  // Product -> category map (paginate products, pulling only id, name, categories)
+  const catMap={};
+  try{
+    let page=1, more=true;
+    while(more && page<=10){
+      const prods=await wooFetch('products',`per_page=100&page=${page}&_fields=id,name,categories`);
+      if(!prods||!prods.length){more=false;break;}
+      for(const pr of prods){
+        const slugs=(pr.categories||[]).map(c=>c.slug);
+        catMap[pr.id]=slugs;
+      }
+      if(prods.length<100)more=false;
+      page++;
+    }
+  }catch(e){}
 
   const store={
     periods:{},
     topByPeriod:topByPeriod,
+    catMap:catMap,
     fetchedAt:new Date().toISOString()
   };
   for(const p of ['week','month','year']){
@@ -860,20 +876,25 @@ function setSellMode(m,el){
   el.classList.add('active');
   renderStoreProducts();
 }
-// Keyword matching for product types based on product name
-const TYPE_KEYWORDS={
-  racket:['racket','racquet','bat','pala'],
-  ball:['ball','balls'],
-  shoe:['shoe','shoes','footwear','trainer'],
-  bag:['bag','backpack','holdall','racket bag'],
-  accessory:['grip','overgrip','protector','wristband','cap','towel','string','dampener','accessory','tube']
+// Map filter buttons to real WooCommerce category slugs
+const TYPE_SLUGS={
+  racket:['padel-rackets'],
+  ball:['padel-balls'],
+  shoe:['padel-shoes'],
+  bag:['padel-bags']
 };
-function matchesType(name){
+function matchesType(product){
   if(prodType==='all')return true;
-  const n=(name||'').toLowerCase();
-  const kw=TYPE_KEYWORDS[prodType]||[];
-  // For balls, avoid matching "ball" inside other words by checking word-ish boundaries loosely
-  return kw.some(k=>n.includes(k));
+  const data=JSON.parse(localStorage.getItem('woo_data')||'null');
+  const catMap=(data&&data.catMap)||{};
+  const slugs=catMap[product.productId]||[];
+  if(prodType==='accessory'){
+    // Accessories = anything NOT in the main 4 categories
+    const main=['padel-rackets','padel-balls','padel-shoes','padel-bags'];
+    return !slugs.some(s=>main.includes(s));
+  }
+  const want=TYPE_SLUGS[prodType]||[];
+  return slugs.some(s=>want.includes(s));
 }
 function renderStore(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
@@ -901,7 +922,7 @@ function renderStoreProducts(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
   if(!data){return;}
   const top=(data.topByPeriod&&data.topByPeriod[wooPeriod])||[];
-  let filtered=top.filter(t=>matchesType(t.name));
+  let filtered=top.filter(t=>matchesType(t));
   // sort best or worst
   filtered=[...filtered].sort((a,b)=> sellMode==='best' ? b.quantity-a.quantity : a.quantity-b.quantity);
   filtered=filtered.slice(0,15);
