@@ -109,8 +109,8 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
 <div id="setupView">
   <div class="setup-card">
     <div class="setup-logo">📊</div>
-    <h1>Content <span class="accent-word">Dashboard</span></h1>
-    <p>Connect YouTube and Instagram to auto-load all your content analytics.</p>
+    <h1>Analysis <span class="accent-word">Dashboard</span></h1>
+    <p>Your complete content and commerce command centre — track YouTube, Instagram, email and store performance, all in one place.</p>
 
     <div class="setup-section">
       <div class="setup-section-label"><span class="nav-dot dot-yt"></span> YouTube</div>
@@ -274,7 +274,22 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
             <div style="position:relative;height:200px;"><canvas id="storeOrdersChart"></canvas></div>
           </div>
           <div class="chart-card" style="overflow-x:auto;">
-            <div class="chart-label">Best selling products (last 12 months)</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+              <div class="chart-label" style="margin-bottom:0;" id="storeTopLabel">Best selling products</div>
+              <div style="display:flex;gap:6px;">
+                <button class="filter-btn active" id="sellBest" onclick="setSellMode('best',this)">Best sellers</button>
+                <button class="filter-btn" id="sellWorst" onclick="setSellMode('worst',this)">Worst sellers</button>
+              </div>
+            </div>
+            <div class="filter-bar" style="margin-bottom:1rem;">
+              <span class="filter-label">Type:</span>
+              <button class="filter-btn active" onclick="setProdType('all',this)">All</button>
+              <button class="filter-btn" onclick="setProdType('racket',this)">Rackets</button>
+              <button class="filter-btn" onclick="setProdType('ball',this)">Balls</button>
+              <button class="filter-btn" onclick="setProdType('shoe',this)">Shoes</button>
+              <button class="filter-btn" onclick="setProdType('bag',this)">Bags</button>
+              <button class="filter-btn" onclick="setProdType('accessory',this)">Accessories</button>
+            </div>
             <table class="video-table">
               <thead><tr><th>Product</th><th>Units sold</th></tr></thead>
               <tbody id="storeTopBody"></tbody>
@@ -334,7 +349,7 @@ const MC_DC = 'us7';
 const WOO_STORE = 'https://everythingpadel.co.uk';
 let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='', MC_KEY='', WOO_CK='', WOO_CS='';
 let charts={};
-let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all', wooPeriod='week';
+let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all', wooPeriod='week', prodType='all', sellMode='best';
 
 function show(id){
   ['setupView','loadingView','appView'].forEach(v=>{
@@ -614,16 +629,18 @@ async function fetchWoo(){
   for(const p of ['week','month','year']){
     try{ periods[p]=await wooFetch('reports/sales',`period=${p}`); }catch(e){ periods[p]=null; }
   }
-  // Top sellers (last 12 months by default; we also grab period-specific)
-  let topSellers=[];
-  try{
-    const ts=await wooFetch('reports/top_sellers','period=year');
-    topSellers=(ts||[]).map(t=>({name:t.name,productId:t.product_id,quantity:Number(t.quantity)||0}));
-  }catch(e){}
+  // Top sellers per period
+  const topByPeriod={};
+  for(const p of ['week','month','year']){
+    try{
+      const ts=await wooFetch('reports/top_sellers',`period=${p}`);
+      topByPeriod[p]=(ts||[]).map(t=>({name:t.name,productId:t.product_id,quantity:Number(t.quantity)||0}));
+    }catch(e){ topByPeriod[p]=[]; }
+  }
 
   const store={
     periods:{},
-    topSellers:topSellers.sort((a,b)=>b.quantity-a.quantity).slice(0,15),
+    topByPeriod:topByPeriod,
     fetchedAt:new Date().toISOString()
   };
   for(const p of ['week','month','year']){
@@ -652,6 +669,8 @@ function setFilter(f,el){
   // Always land on Overview when switching platform, so you never stay stuck
   // on the Email/Store (or any other) page showing the wrong thing.
   currentPage='overview';
+  const dateBar=document.querySelector('.date-bar');
+  if(dateBar)dateBar.style.display='flex';
   ['overview','compare','growth','followers','email','store','videos'].forEach(pg=>{
     const elp=document.getElementById('page-'+pg);
     if(elp)elp.style.display=pg==='overview'?'block':'none';
@@ -672,6 +691,10 @@ function showPage(p){
     if(nav)nav.classList.add('active');
     document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':'Store (WooCommerce)';
   }
+  // The top time-period bar only applies to content pages; hide it on Store
+  // (which has its own Period control).
+  const dateBar=document.querySelector('.date-bar');
+  if(dateBar)dateBar.style.display=(p==='store')?'none':'flex';
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
@@ -819,9 +842,38 @@ function renderEmail(){
 
 function setWooPeriod(p,el){
   wooPeriod=p;
-  document.querySelectorAll('#page-store .filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#page-store .filter-btn.active').forEach(b=>{ if(b.id==='wooWeek'||b.id==='wooMonth'||b.id==='wooYear')b.classList.remove('active'); });
   el.classList.add('active');
   renderStore();
+}
+function setProdType(t,el){
+  prodType=t;
+  // clear active only within the type row
+  el.parentElement.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderStoreProducts();
+}
+function setSellMode(m,el){
+  sellMode=m;
+  document.getElementById('sellBest').classList.remove('active');
+  document.getElementById('sellWorst').classList.remove('active');
+  el.classList.add('active');
+  renderStoreProducts();
+}
+// Keyword matching for product types based on product name
+const TYPE_KEYWORDS={
+  racket:['racket','racquet','bat','pala'],
+  ball:['ball','balls'],
+  shoe:['shoe','shoes','footwear','trainer'],
+  bag:['bag','backpack','holdall','racket bag'],
+  accessory:['grip','overgrip','protector','wristband','cap','towel','string','dampener','accessory','tube']
+};
+function matchesType(name){
+  if(prodType==='all')return true;
+  const n=(name||'').toLowerCase();
+  const kw=TYPE_KEYWORDS[prodType]||[];
+  // For balls, avoid matching "ball" inside other words by checking word-ish boundaries loosely
+  return kw.some(k=>n.includes(k));
 }
 function renderStore(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
@@ -843,16 +895,28 @@ function renderStore(){
   const labels=daily.map(d=>d.date);
   mk('storeSalesChart','line',labels,daily.map(d=>+d.sales.toFixed(2)),'#4ade80',true);
   mk('storeOrdersChart','bar',labels,daily.map(d=>d.orders),'#96588a');
-  const top=data.topSellers||[];
-  const maxQ=top.length?Math.max(...top.map(t=>t.quantity)):1;
-  document.getElementById('storeTopBody').innerHTML=top.map(t=>`
+  renderStoreProducts();
+}
+function renderStoreProducts(){
+  const data=JSON.parse(localStorage.getItem('woo_data')||'null');
+  if(!data){return;}
+  const top=(data.topByPeriod&&data.topByPeriod[wooPeriod])||[];
+  let filtered=top.filter(t=>matchesType(t.name));
+  // sort best or worst
+  filtered=[...filtered].sort((a,b)=> sellMode==='best' ? b.quantity-a.quantity : a.quantity-b.quantity);
+  filtered=filtered.slice(0,15);
+  const label=document.getElementById('storeTopLabel');
+  if(label)label.textContent=(sellMode==='best'?'Best':'Worst')+' selling '+(prodType==='all'?'products':prodType+'s')+' · this '+wooPeriod;
+  const maxQ=filtered.length?Math.max(...filtered.map(t=>t.quantity)):1;
+  const color=sellMode==='best'?'#96588a':'#c0607a';
+  document.getElementById('storeTopBody').innerHTML=filtered.map(t=>`
     <tr><td>${t.name}</td>
     <td style="font-family:var(--mono);">
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="min-width:40px;">${fmt(t.quantity)}</span>
-        <div style="flex:1;height:6px;border-radius:99px;background:var(--surface2);max-width:200px;"><div style="height:100%;width:${(t.quantity/maxQ*100).toFixed(0)}%;background:#96588a;border-radius:99px;"></div></div>
+        <div style="flex:1;height:6px;border-radius:99px;background:var(--surface2);max-width:200px;"><div style="height:100%;width:${maxQ?(t.quantity/maxQ*100).toFixed(0):0}%;background:${color};border-radius:99px;"></div></div>
       </div>
-    </td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No product data.</td></tr>`;
+    </td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No ${prodType==='all'?'product':prodType} data for this period.</td></tr>`;
 }
 
 function renderVideosPage(){
