@@ -653,12 +653,13 @@ async function fetchWoo(){
   for(const p of ['week','month','year']){
     try{ periods[p]=await wooFetch('reports/sales',`period=${p}`); }catch(e){ periods[p]=null; }
   }
-  // Product -> category map (paginate products, pulling only id, name, categories)
+  // Product -> category map. Fetch ALL statuses (publish, draft, private) so
+  // every product that could appear in sales gets categorised. Page up to 1000.
   const catMap={};
   try{
     let page=1, more=true;
     while(more && page<=10){
-      const prods=await wooFetch('products',`per_page=100&page=${page}&_fields=id,name,categories`);
+      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories`);
       if(!prods||!prods.length){more=false;break;}
       for(const pr of prods){
         const slugs=(pr.categories||[]).map(c=>c.slug);
@@ -945,9 +946,19 @@ function matchesType(product){
   if(prodType==='all')return true;
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
   const catMap=(data&&data.catMap)||{};
-  const slugs=catMap[product.productId]||[];
+  const slugs=catMap[product.productId];
+  // If we don't know this product's categories, fall back to a name check so
+  // it doesn't silently get miscategorised (e.g. a racket landing in accessories).
+  if(!slugs||!slugs.length){
+    const n=(product.name||'').toLowerCase();
+    if(prodType==='racket')return n.includes('racket')||n.includes('racquet');
+    if(prodType==='ball')return n.includes('ball');
+    if(prodType==='shoe')return n.includes('shoe')||n.includes('trainer');
+    if(prodType==='bag')return n.includes('bag');
+    if(prodType==='accessory')return false; // don't assume unknowns are accessories
+    return false;
+  }
   if(prodType==='accessory'){
-    // Accessories = anything NOT in the main 4 categories
     const main=['padel-rackets','padel-balls','padel-shoes','padel-bags'];
     return !slugs.some(s=>main.includes(s));
   }
@@ -1047,11 +1058,14 @@ function renderReport(){
   const igGain=histGain('instagram'), ytGain=histGain('youtube'), mcGain=histGain('mailchimp');
 
   const woo=JSON.parse(localStorage.getItem('woo_data')||'null');
-  // Use the woo 'week' period only when reporting the current/last week; otherwise note unavailable
   const isRecent=(chosen.key==='current'||chosen.key==='w0');
   const wk=(isRecent&&woo&&woo.periods&&woo.periods.week)?woo.periods.week:null;
-  const weekSales=wk?wk.totalSales:0, weekOrders=wk?wk.totalOrders:0;
-  const aov=weekOrders>0?weekSales/weekOrders:0;
+  const weekSales=wk?wk.totalSales:0, weekNet=wk?wk.netSales:0, weekOrders=wk?wk.totalOrders:0;
+  const aov=weekOrders>0?weekNet/weekOrders:0;
+
+  // Actual date span of the content we have for this week
+  const vidDates=weekVids.map(v=>new Date(v.published)).sort((a,b)=>a-b);
+  const spanFrom=vidDates.length?vidDates[0]:wStart, spanTo=vidDates.length?vidDates[vidDates.length-1]:wEnd;
 
   const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
   const weekCamps=camps.filter(c=>{if(!c.sendTime)return false;const dt=new Date(c.sendTime);return dt>=wStart&&dt<wEnd;});
@@ -1079,22 +1093,46 @@ function renderReport(){
   if(topVid)next.push(`Make a follow-up to "${topVid.title}" while the topic has momentum.`);
   next.push(`Feature this week's best-selling products in content and email.`);
 
-  const salesCard = (isRecent||weekSales>0) ? `${money(weekSales)}` : '—';
-  const salesSub = isRecent ? `${fmt(weekOrders)} orders` : 'select recent week';
+  const ytVids=weekVids.filter(v=>v.platform==='youtube').sort((a,b)=>b.views-a.views);
+  const igVids=weekVids.filter(v=>v.platform==='instagram').sort((a,b)=>b.views-a.views);
+  const ytViews=ytVids.reduce((s,v)=>s+v.views,0);
+  const igViews=igVids.reduce((s,v)=>s+v.views,0);
+  const fmtShort=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  const vidRow=v=>`<tr><td title="${v.title}">${v.title.length>42?v.title.slice(0,40)+'…':v.title}</td>
+    <td style="color:var(--muted);white-space:nowrap;">${v.published||'—'}</td>
+    <td style="font-family:var(--mono);text-align:right;">${fmt(v.views)}</td>
+    <td style="font-family:var(--mono);text-align:right;">${fmt(v.likes||0)}</td></tr>`;
+  const platformTable=(title,colour,vids,total)=>`
+    <div class="chart-card" style="overflow-x:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="chart-label" style="margin-bottom:0;color:${colour};">${title}</div>
+        <div style="font-size:13px;color:var(--muted);">${vids.length} posts · ${fmt(total)} views</div>
+      </div>
+      ${vids.length?`<table class="video-table"><thead><tr><th>Title</th><th>Date</th><th style="text-align:right;">Views</th><th style="text-align:right;">Likes</th></tr></thead><tbody>${vids.slice(0,10).map(vidRow).join('')}</tbody></table>`:`<div style="padding:1.5rem;text-align:center;color:var(--muted);">No posts in this window.</div>`}
+    </div>`;
+
+  const salesCard = (isRecent||weekNet>0) ? `${money(weekNet)}` : '—';
+  const salesSub = isRecent ? `net · ${fmt(weekOrders)} orders` : 'select recent week';
 
   const liItems=(arr)=>arr.map(t=>`<li style="margin-bottom:6px;line-height:1.5;">${t}</li>`).join('');
   const sectionCard=(title,colour,inner)=>`<div class="chart-card"><div class="chart-label" style="color:${colour};">${title}</div>${inner}</div>`;
 
   body.innerHTML=`
+    <div class="chart-card" style="padding:12px 16px;font-size:13px;color:var(--muted2);">
+      📅 Content data covers <strong style="color:var(--text);">${fmtShort(spanFrom)} – ${fmtShort(spanTo)}</strong>
+      (reporting window: ${fmtShort(wStart)} – ${fmtShort(wEnd)}${chosen.key==='current'?', in progress':''}).
+    </div>
     <div class="metric-grid">
       <div class="metric-card"><div class="metric-label">Content views</div><div class="metric-value c-blue">${fmt(weekViews)}</div><div class="metric-sub">${weekVids.length} posts</div></div>
-      <div class="metric-card"><div class="metric-label">Store sales</div><div class="metric-value c-green">${salesCard}</div><div class="metric-sub">${salesSub}</div></div>
+      <div class="metric-card"><div class="metric-label">Net store sales</div><div class="metric-value c-green">${salesCard}</div><div class="metric-sub">${salesSub}</div></div>
       <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${isRecent?money(aov):'—'}</div></div>
       <div class="metric-card"><div class="metric-label">IG followers</div><div class="metric-value c-ig">${fmt(igNow)}</div><div class="metric-sub">${igGain!==null?(igGain>=0?'+':'')+fmt(igGain):'—'}</div></div>
       <div class="metric-card"><div class="metric-label">YT subscribers</div><div class="metric-value c-yt">${fmt(ytNow)}</div><div class="metric-sub">${ytGain!==null?(ytGain>=0?'+':'')+fmt(ytGain):'—'}</div></div>
       <div class="metric-card"><div class="metric-label">Email list</div><div class="metric-value" style="color:#ffe01b;">${fmt(mcNow)}</div><div class="metric-sub">${mcGain!==null?(mcGain>=0?'+':'')+fmt(mcGain):'—'}</div></div>
     </div>
-    ${!isRecent?`<div class="chart-card" style="font-size:12px;color:var(--muted);">Store sales shown only for the current/last week (live store data covers the recent period). Content, email and follower figures are accurate for any week you've been tracking.</div>`:''}
+    ${!isRecent?`<div class="chart-card" style="font-size:12px;color:var(--muted);">Store sales shown only for the current/last week. Content, email and follower figures are accurate for any tracked week.</div>`:''}
+    ${platformTable('▶ YouTube Shorts',' #ff4d4d',ytVids,ytViews)}
+    ${platformTable('◆ Instagram Reels','#e1306c',igVids,igViews)}
     ${sectionCard('✅ What went well','#4ade80',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(wins.length?wins:['Add data by refreshing to populate this section.'])}</ul>`)}
     ${sectionCard('⚠️ What could be better','#fbbf24',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(improves.length?improves:['Nothing flagged — solid week across the board.'])}</ul>`)}
     ${sectionCard('🎯 What to do next week','#5b9bff',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(next)}</ul>`)}
