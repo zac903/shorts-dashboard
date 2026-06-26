@@ -204,6 +204,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
           <button class="date-btn" onclick="setDateRange('month',this)">Last month</button>
           <button class="date-btn" onclick="setDateRange('3months',this)">Last 3 months</button>
           <button class="date-btn" onclick="setDateRange('year',this)">Last year</button>
+          <span id="dateSpan" style="margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;"></span>
         </div>
         <div id="page-overview">
           <div class="metric-grid" id="metricGrid"></div>
@@ -560,23 +561,26 @@ async function fetchIG(){
   localStorage.setItem('ig_videos',JSON.stringify(out));
 }
 
-// Fetch a single insight metric for one media item. Returns 0 on any failure
-// (older media, metric not supported for that type, etc.) instead of throwing.
+// Fetch a single insight metric for one media item. Returns 0 on any failure.
 async function igMetric(mediaId, metric){
+  // For views, try the broader play-count metrics first so numbers line up
+  // closer to the Instagram app's unified "Views" figure, then fall back.
+  if(metric==='views'){
+    const tryOrder=['ig_reels_aggregated_all_plays_count','plays','views'];
+    for(const mt of tryOrder){
+      try{
+        const ins=await igFetch(`${mediaId}/insights?metric=${mt}`);
+        const row=(ins.data&&ins.data[0]);
+        if(row && row.values && row.values[0] && row.values[0].value!=null) return row.values[0].value||0;
+      }catch(e){/* try next metric */}
+    }
+    return 0;
+  }
   try{
     const ins=await igFetch(`${mediaId}/insights?metric=${metric}`);
     const row=(ins.data&&ins.data[0]);
     if(row && row.values && row.values[0]) return row.values[0].value||0;
-  }catch(e){
-    // 'views' is newer; if it's rejected for an older Reel, fall back to 'plays'
-    if(metric==='views'){
-      try{
-        const ins=await igFetch(`${mediaId}/insights?metric=plays`);
-        const row=(ins.data&&ins.data[0]);
-        if(row && row.values && row.values[0]) return row.values[0].value||0;
-      }catch(e2){}
-    }
-  }
+  }catch(e){}
   return 0;
 }
 
@@ -789,6 +793,7 @@ function logout(){
 function engRate(v){if(!v.views)return 0;return((v.likes+v.comments+(v.shares||0))/v.views*100);}
 function renderAll(){
   const videos=getFiltered();
+  updateDateSpan(videos);
   renderMetrics(videos);
   if(currentPage==='overview')renderOverview(videos);
   if(currentPage==='compare')renderCompare();
@@ -798,6 +803,16 @@ function renderAll(){
   if(currentPage==='store')renderStore();
   if(currentPage==='report')renderReport();
   if(currentPage==='videos')renderVideosPage();
+}
+function updateDateSpan(videos){
+  const el=document.getElementById('dateSpan');
+  if(!el)return;
+  const dated=videos.filter(v=>v.published).map(v=>new Date(v.published)).sort((a,b)=>a-b);
+  if(!dated.length){el.textContent='';return;}
+  const f=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  const from=dated[0], to=dated[dated.length-1];
+  const label=dateRange==='all'?'All content':'Showing';
+  el.textContent=`${label}: ${f(from)} → ${f(to)}`;
 }
 function renderMetrics(videos){
   if(!videos.length){document.getElementById('metricGrid').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted);">No data yet. Click Refresh.</div>`;return;}
@@ -947,23 +962,26 @@ function matchesType(product){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
   const catMap=(data&&data.catMap)||{};
   const slugs=catMap[product.productId];
-  // If we don't know this product's categories, fall back to a name check so
-  // it doesn't silently get miscategorised (e.g. a racket landing in accessories).
   if(!slugs||!slugs.length){
     const n=(product.name||'').toLowerCase();
     if(prodType==='racket')return n.includes('racket')||n.includes('racquet');
     if(prodType==='ball')return n.includes('ball');
     if(prodType==='shoe')return n.includes('shoe')||n.includes('trainer');
     if(prodType==='bag')return n.includes('bag');
-    if(prodType==='accessory')return false; // don't assume unknowns are accessories
+    if(prodType==='accessory')return false;
     return false;
   }
-  if(prodType==='accessory'){
-    const main=['padel-rackets','padel-balls','padel-shoes','padel-bags'];
-    return !slugs.some(s=>main.includes(s));
-  }
-  const want=TYPE_SLUGS[prodType]||[];
-  return slugs.some(s=>want.includes(s));
+  // Match any sub-category, e.g. 'beginner-padel-rackets', 'intermediate-padel-rackets'
+  const isRacket=slugs.some(s=>s.includes('padel-racket'));
+  const isBall=slugs.some(s=>s.includes('padel-ball'));
+  const isShoe=slugs.some(s=>s.includes('padel-shoe'));
+  const isBag=slugs.some(s=>s.includes('padel-bag'));
+  if(prodType==='racket')return isRacket;
+  if(prodType==='ball')return isBall;
+  if(prodType==='shoe')return isShoe;
+  if(prodType==='bag')return isBag;
+  if(prodType==='accessory')return !(isRacket||isBall||isShoe||isBag);
+  return false;
 }
 function renderStore(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
