@@ -171,6 +171,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <div class="nav-section">Platforms</div>
       <button class="nav-item active" onclick="setFilter('all',this)"><span class="nav-dot dot-all"></span> All platforms</button>
       <button class="nav-item" onclick="setFilter('youtube',this)"><span class="nav-dot dot-yt"></span> YouTube Shorts</button>
+      <button class="nav-item" onclick="showPage('ytlong')"><span class="nav-dot" style="background:#cc0000;"></span> YouTube Videos</button>
       <button class="nav-item" onclick="setFilter('instagram',this)"><span class="nav-dot dot-ig"></span> Instagram Reels</button>
       <button class="nav-item" onclick="showPage('email')"><span class="nav-dot" style="background:#ffe01b;"></span> Email (Mailchimp)</button>
       <button class="nav-item" onclick="showPage('store')"><span class="nav-dot" style="background:#96588a;"></span> Store (WooCommerce)</button>
@@ -223,7 +224,13 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
             </div>
           </div>
           <div class="chart-card" style="overflow-x:auto;">
-            <div class="chart-label" id="overviewListLabel">Posts in this view</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+              <div class="chart-label" style="margin-bottom:0;" id="overviewListLabel">Posts in this view</div>
+              <div style="display:flex;gap:6px;">
+                <button class="filter-btn active" id="ovSortRecent" onclick="setOvSort('recent',this)">Most recent</button>
+                <button class="filter-btn" id="ovSortViews" onclick="setOvSort('views',this)">Most views</button>
+              </div>
+            </div>
             <table class="video-table">
               <thead><tr><th>Title</th><th>Platform</th><th>Date</th><th style="text-align:right;">Views</th><th style="text-align:right;">Likes</th><th style="text-align:right;">Eng %</th></tr></thead>
               <tbody id="overviewListBody"></tbody>
@@ -328,6 +335,27 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
           </div>
           <div id="reportBody"></div>
         </div>
+        <div id="page-ytlong" style="display:none;">
+          <div class="metric-grid" id="ytlongMetrics"></div>
+          <div class="chart-card">
+            <div class="chart-label">Views per video</div>
+            <div style="position:relative;height:240px;"><canvas id="ytlongViewsChart"></canvas></div>
+          </div>
+          <div class="chart-card" style="overflow-x:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+              <div class="chart-label" style="margin-bottom:0;">All long-form videos</div>
+              <div style="display:flex;gap:6px;">
+                <button class="filter-btn active" id="ytlSortRecent" onclick="setYtlSort('recent',this)">Most recent</button>
+                <button class="filter-btn" id="ytlSortViews" onclick="setYtlSort('views',this)">Most views</button>
+              </div>
+            </div>
+            <table class="video-table">
+              <thead><tr><th>Title</th><th>Date</th><th>Length</th><th style="text-align:right;">Views</th><th style="text-align:right;">Likes</th><th style="text-align:right;">Comments</th><th style="text-align:right;">Eng %</th></tr></thead>
+              <tbody id="ytlongBody"></tbody>
+            </table>
+          </div>
+          <div class="chart-card" style="font-size:12px;color:var(--muted);">Note: click-through rate and average view duration are private YouTube Analytics metrics not available through the public API, so they can't be shown here. Figures above are public metrics.</div>
+        </div>
         <div id="page-followers" style="display:none;">
           <div class="metric-grid" id="followerMetrics"></div>
           <div class="chart-card">
@@ -381,7 +409,7 @@ const MC_DC = 'us7';
 const WOO_STORE = 'https://everythingpadel.co.uk';
 let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='', MC_KEY='', WOO_CK='', WOO_CS='';
 let charts={};
-let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all', wooPeriod='week', prodType='all', sellMode='best';
+let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all', wooPeriod='week', prodType='all', sellMode='best', ytlSort='recent', ovSort='recent';
 
 function show(id){
   ['setupView','loadingView','appView'].forEach(v=>{
@@ -517,13 +545,17 @@ async function fetchYT(){
     const d=await ytFetch(`videos?part=snippet,statistics,contentDetails&id=${ids.slice(i,i+50).join(',')}`);
     for(const v of d.items){
       const secs=parseDur(v.contentDetails.duration);
-      out.push({id:v.id,platform:'youtube',title:v.snippet.title,published:v.snippet.publishedAt.slice(0,10),
+      const isShort=secs<=180;
+      out.push({id:v.id,platform:'youtube',ytType:isShort?'short':'long',title:v.snippet.title,published:v.snippet.publishedAt.slice(0,10),
         views:+(v.statistics.viewCount||0),likes:+(v.statistics.likeCount||0),comments:+(v.statistics.commentCount||0),
-        shares:0,url:`https://youtube.com/shorts/${v.id}`,duration:secs});
+        shares:0,url:isShort?`https://youtube.com/shorts/${v.id}`:`https://youtube.com/watch?v=${v.id}`,duration:secs});
     }
   }
-  const shorts=out.filter(v=>v.duration<=180);
-  localStorage.setItem('yt_videos',JSON.stringify(shorts.length?shorts:out));
+  // Store Shorts (≤3 min) under yt_videos for the Shorts platform, and long-form separately
+  const shorts=out.filter(v=>v.ytType==='short');
+  const longform=out.filter(v=>v.ytType==='long');
+  localStorage.setItem('yt_videos',JSON.stringify(shorts));
+  localStorage.setItem('yt_longform',JSON.stringify(longform));
 }
 function parseDur(d){if(!d)return 0;const m=d.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);if(!m)return 0;return(+(m[1]||0))*3600+(+(m[2]||0))*60+(+(m[3]||0));}
 
@@ -766,20 +798,20 @@ function setFilter(f,el){
 }
 function showPage(p){
   currentPage=p;
-  ['overview','compare','growth','followers','email','store','report','videos'].forEach(pg=>{
+  ['overview','compare','growth','followers','email','store','report','ytlong','videos'].forEach(pg=>{
     const elp=document.getElementById('page-'+pg);
     if(elp)elp.style.display=pg===p?'block':'none';
   });
-  // Email, Store & Report behave like their own sections
-  if(p==='email'||p==='store'||p==='report'){
+  // Email, Store, Report & YT Videos behave like their own sections
+  if(p==='email'||p==='store'||p==='report'||p==='ytlong'){
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    const label=p==='email'?'Email':p==='store'?'Store':'Weekly Report';
+    const label=p==='email'?'Email':p==='store'?'Store':p==='report'?'Weekly Report':'YouTube Videos';
     const nav=[...document.querySelectorAll('.nav-item')].find(n=>n.textContent.includes(label));
     if(nav)nav.classList.add('active');
-    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (WooCommerce)':'Weekly Report';
+    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (WooCommerce)':p==='report'?'Weekly Report':'YouTube Videos';
   }
   const dateBar=document.querySelector('.date-bar');
-  if(dateBar)dateBar.style.display=(p==='store'||p==='report')?'none':'flex';
+  if(dateBar)dateBar.style.display=(p==='store'||p==='report'||p==='ytlong')?'none':'flex';
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
@@ -790,7 +822,7 @@ function openSettings(){
   if(t&&t.trim()){localStorage.setItem('ig_token',t.trim());IG_TOKEN=t.trim();alert('Token updated. Click Refresh to reload Instagram.');}
 }
 function logout(){
-  ['yt_key','yt_videos','ig_token','ig_account','ig_videos','mc_key','mc_campaigns','followers_mailchimp','woo_ck','woo_cs','woo_data'].forEach(k=>localStorage.removeItem(k));
+  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','mc_key','mc_campaigns','followers_mailchimp','woo_ck','woo_cs','woo_data'].forEach(k=>localStorage.removeItem(k));
   YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';WOO_CK='';WOO_CS='';
   Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
   show('setupView');
@@ -809,6 +841,7 @@ function renderAll(){
   if(currentPage==='email')renderEmail();
   if(currentPage==='store')renderStore();
   if(currentPage==='report')renderReport();
+  if(currentPage==='ytlong')renderYtLong();
   if(currentPage==='videos')renderVideosPage();
 }
 function updateDateSpan(videos){
@@ -834,6 +867,13 @@ function renderMetrics(videos){
     <div class="metric-card"><div class="metric-label">Avg views/video</div><div class="metric-value c-yt">${fmt(av)}</div></div>
     <div class="metric-card"><div class="metric-label">Engagement rate</div><div class="metric-value c-green">${er}%</div></div>`;
 }
+function setOvSort(mode,el){
+  ovSort=mode;
+  document.getElementById('ovSortRecent').classList.remove('active');
+  document.getElementById('ovSortViews').classList.remove('active');
+  el.classList.add('active');
+  renderOverview(getFiltered());
+}
 function renderOverview(videos){
   if(!videos.length){
     const b=document.getElementById('overviewListBody');if(b)b.innerHTML='';
@@ -846,12 +886,12 @@ function renderOverview(videos){
   multi('viewsChart','bar',labels,sorted.map(v=>v.views),bg,bd);
   multi('likesChart','bar',labels,sorted.map(v=>v.likes),bg,bd);
   multi('engChart','bar',labels,sorted.map(v=>+engRate(v).toFixed(2)),bg,bd);
-  // Video list, highest views first
-  const byViews=[...videos].sort((a,b)=>b.views-a.views);
+  // Video list, sorted by toggle (default most recent)
+  const byList=[...videos].sort((a,b)=> ovSort==='views' ? b.views-a.views : new Date(b.published)-new Date(a.published));
   const label=document.getElementById('overviewListLabel');
-  if(label)label.textContent=`Posts in this view (${videos.length}) — sorted by views`;
+  if(label)label.textContent=`Posts in this view (${videos.length})`;
   const body=document.getElementById('overviewListBody');
-  if(body)body.innerHTML=byViews.map(v=>`
+  if(body)body.innerHTML=byList.map(v=>`
     <tr>
       <td title="${(v.title||'').replace(/"/g,'&quot;')}">${v.url?`<a href="${v.url}" target="_blank" style="color:var(--text);text-decoration:none;">`:''}${v.title.length>46?v.title.slice(0,44)+'…':v.title}${v.url?'</a>':''}</td>
       <td><span class="platform-badge pb-${v.platform}">${v.platform==='youtube'?'YT':'IG'}</span></td>
@@ -1186,6 +1226,45 @@ function renderReport(){
     ${sectionCard('🎯 What to do next week','#5b9bff',`<ul style="margin:0;padding-left:18px;font-size:14px;color:var(--text);">${liItems(next)}</ul>`)}
     <div class="chart-card" style="font-size:12px;color:var(--muted);">Commentary is auto-generated from the selected week's data. Edit freely before sharing.</div>
   `;
+}
+
+function setYtlSort(mode,el){
+  ytlSort=mode;
+  document.getElementById('ytlSortRecent').classList.remove('active');
+  document.getElementById('ytlSortViews').classList.remove('active');
+  el.classList.add('active');
+  renderYtLong();
+}
+function renderYtLong(){
+  const vids=JSON.parse(localStorage.getItem('yt_longform')||'[]');
+  const fmtLen=s=>{const m=Math.floor(s/60),sec=s%60;return m+':'+String(sec).padStart(2,'0');};
+  const totalViews=vids.reduce((s,v)=>s+v.views,0);
+  const totalLikes=vids.reduce((s,v)=>s+v.likes,0);
+  const avgViews=vids.length?Math.round(totalViews/vids.length):0;
+  const topVid=[...vids].sort((a,b)=>b.views-a.views)[0];
+  document.getElementById('ytlongMetrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Long-form videos</div><div class="metric-value">${vids.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Total views</div><div class="metric-value c-yt">${fmt(totalViews)}</div></div>
+    <div class="metric-card"><div class="metric-label">Avg views/video</div><div class="metric-value c-blue">${fmt(avgViews)}</div></div>
+    <div class="metric-card"><div class="metric-label">Total likes</div><div class="metric-value c-green">${fmt(totalLikes)}</div></div>
+    <div class="metric-card"><div class="metric-label">Top video</div><div class="metric-value c-purple" style="font-size:15px;line-height:1.3;">${topVid?(topVid.title.length>40?topVid.title.slice(0,38)+'…':topVid.title):'—'}</div><div class="metric-sub">${topVid?fmt(topVid.views)+' views':''}</div></div>`;
+  if(!vids.length){
+    document.getElementById('ytlongBody').innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted);">No long-form videos found. Refresh to load.</td></tr>';
+    return;
+  }
+  const chrono=[...vids].sort((a,b)=>new Date(a.published)-new Date(b.published));
+  mk('ytlongViewsChart','bar',chrono.map(v=>v.title.length>14?v.title.slice(0,12)+'…':v.title),chrono.map(v=>v.views),'#cc0000');
+  const sorted=[...vids].sort((a,b)=> ytlSort==='views' ? b.views-a.views : new Date(b.published)-new Date(a.published));
+  document.getElementById('ytlongBody').innerHTML=sorted.map(v=>`
+    <tr>
+      <td title="${(v.title||'').replace(/"/g,'&quot;')}"><a href="${v.url}" target="_blank" style="color:var(--text);text-decoration:none;">${v.title.length>44?v.title.slice(0,42)+'…':v.title}</a></td>
+      <td style="color:var(--muted);white-space:nowrap;">${v.published}</td>
+      <td style="font-family:var(--mono);color:var(--muted);">${fmtLen(v.duration)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(v.views)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(v.likes)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(v.comments)}</td>
+      <td style="text-align:right;"><span class="eng-badge ${engRate(v)>=3?'eg':engRate(v)>=1?'ea':'er'}">${engRate(v).toFixed(1)}%</span></td>
+    </tr>`).join('');
 }
 
 function renderVideosPage(){
