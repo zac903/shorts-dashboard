@@ -222,6 +222,13 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
               <div style="position:relative;height:200px;"><canvas id="engChart"></canvas></div>
             </div>
           </div>
+          <div class="chart-card" style="overflow-x:auto;">
+            <div class="chart-label" id="overviewListLabel">Posts in this view</div>
+            <table class="video-table">
+              <thead><tr><th>Title</th><th>Platform</th><th>Date</th><th style="text-align:right;">Views</th><th style="text-align:right;">Likes</th><th style="text-align:right;">Eng %</th></tr></thead>
+              <tbody id="overviewListBody"></tbody>
+            </table>
+          </div>
         </div>
         <div id="page-compare" style="display:none;">
           <div class="two-col" style="margin-bottom:1rem;">
@@ -828,7 +835,10 @@ function renderMetrics(videos){
     <div class="metric-card"><div class="metric-label">Engagement rate</div><div class="metric-value c-green">${er}%</div></div>`;
 }
 function renderOverview(videos){
-  if(!videos.length)return;
+  if(!videos.length){
+    const b=document.getElementById('overviewListBody');if(b)b.innerHTML='';
+    return;
+  }
   const sorted=[...videos].sort((a,b)=>new Date(a.published)-new Date(b.published));
   const labels=sorted.map(v=>v.title.length>18?v.title.slice(0,16)+'…':v.title);
   const bg=sorted.map(v=>v.platform==='youtube'?'#ff4d4dbb':'#e1306cbb');
@@ -836,6 +846,20 @@ function renderOverview(videos){
   multi('viewsChart','bar',labels,sorted.map(v=>v.views),bg,bd);
   multi('likesChart','bar',labels,sorted.map(v=>v.likes),bg,bd);
   multi('engChart','bar',labels,sorted.map(v=>+engRate(v).toFixed(2)),bg,bd);
+  // Video list, highest views first
+  const byViews=[...videos].sort((a,b)=>b.views-a.views);
+  const label=document.getElementById('overviewListLabel');
+  if(label)label.textContent=`Posts in this view (${videos.length}) — sorted by views`;
+  const body=document.getElementById('overviewListBody');
+  if(body)body.innerHTML=byViews.map(v=>`
+    <tr>
+      <td title="${(v.title||'').replace(/"/g,'&quot;')}">${v.url?`<a href="${v.url}" target="_blank" style="color:var(--text);text-decoration:none;">`:''}${v.title.length>46?v.title.slice(0,44)+'…':v.title}${v.url?'</a>':''}</td>
+      <td><span class="platform-badge pb-${v.platform}">${v.platform==='youtube'?'YT':'IG'}</span></td>
+      <td style="color:var(--muted);white-space:nowrap;">${v.published||'—'}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(v.views)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(v.likes)}</td>
+      <td style="text-align:right;"><span class="eng-badge ${engRate(v)>=3?'eg':engRate(v)>=1?'ea':'er'}">${engRate(v).toFixed(1)}%</span></td>
+    </tr>`).join('');
 }
 function renderCompare(){
   const d=getData(),P=['youtube','instagram'],N=['YouTube','Instagram'],C=['#ff4d4d','#e1306c'];
@@ -971,11 +995,17 @@ function matchesType(product){
     if(prodType==='accessory')return false;
     return false;
   }
-  // Match any sub-category, e.g. 'beginner-padel-rackets', 'intermediate-padel-rackets'
-  const isRacket=slugs.some(s=>s.includes('padel-racket'));
-  const isBall=slugs.some(s=>s.includes('padel-ball'));
-  const isShoe=slugs.some(s=>s.includes('padel-shoe'));
-  const isBag=slugs.some(s=>s.includes('padel-bag'));
+  // Match racket sub-categories precisely: they end in '-padel-rackets' (plural)
+  // or are exactly 'padel-rackets'. This excludes things like
+  // 'padel-racket-protector' which would otherwise match a loose contains check.
+  const isRacketCat=s=>s==='padel-rackets'||s.endsWith('-padel-rackets');
+  const isBallCat=s=>s==='padel-balls'||s.endsWith('-padel-balls');
+  const isShoeCat=s=>s==='padel-shoes'||s.endsWith('-padel-shoes');
+  const isBagCat=s=>s==='padel-bags'||s.endsWith('-padel-bags');
+  const isRacket=slugs.some(isRacketCat);
+  const isBall=slugs.some(isBallCat);
+  const isShoe=slugs.some(isShoeCat);
+  const isBag=slugs.some(isBagCat);
   if(prodType==='racket')return isRacket;
   if(prodType==='ball')return isBall;
   if(prodType==='shoe')return isShoe;
