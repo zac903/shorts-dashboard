@@ -176,6 +176,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <button class="nav-item" onclick="showPage('email')"><span class="nav-dot" style="background:#ffe01b;"></span> Email (Mailchimp)</button>
       <button class="nav-item" onclick="showPage('store')"><span class="nav-dot" style="background:#96588a;"></span> Store (WooCommerce)</button>
       <button class="nav-item" onclick="showPage('report')"><span class="nav-dot" style="background:#c8f04a;"></span> Weekly Report</button>
+      <button class="nav-item" onclick="showPage('monthly')"><span class="nav-dot" style="background:#a78bfa;"></span> Monthly Trends</button>
       <div class="nav-section">Views</div>
       <button class="nav-item" onclick="showPage('overview')">📈 Overview</button>
       <button class="nav-item" onclick="showPage('compare')">⚖️ Compare</button>
@@ -356,6 +357,29 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
           </div>
           <div class="chart-card" style="font-size:12px;color:var(--muted);">Note: click-through rate and average view duration are private YouTube Analytics metrics not available through the public API, so they can't be shown here. Figures above are public metrics.</div>
         </div>
+        <div id="page-monthly" style="display:none;">
+          <div class="chart-card">
+            <div class="chart-label">Content views by month</div>
+            <div style="position:relative;height:260px;"><canvas id="monthlyContentChart"></canvas></div>
+          </div>
+          <div class="two-col">
+            <div class="chart-card">
+              <div class="chart-label">Net store sales by month</div>
+              <div style="position:relative;height:220px;"><canvas id="monthlySalesChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-label">Email revenue by month</div>
+              <div style="position:relative;height:220px;"><canvas id="monthlyEmailChart"></canvas></div>
+            </div>
+          </div>
+          <div class="chart-card" style="overflow-x:auto;">
+            <div class="chart-label">Month-by-month comparison</div>
+            <table class="video-table">
+              <thead><tr><th>Month</th><th style="text-align:right;">Content views</th><th style="text-align:right;">Posts</th><th style="text-align:right;">Net sales</th><th style="text-align:right;">Orders</th><th style="text-align:right;">Email revenue</th><th style="text-align:right;">vs prev month</th></tr></thead>
+              <tbody id="monthlyTableBody"></tbody>
+            </table>
+          </div>
+        </div>
         <div id="page-followers" style="display:none;">
           <div class="metric-grid" id="followerMetrics"></div>
           <div class="chart-card">
@@ -494,22 +518,15 @@ async function refreshAll(){
   show('loadingView');
   let errors=[];
   try{
-    if(YT_KEY){
-      setLoading('Fetching YouTube Shorts...');
-      try{ await fetchYT(); }catch(e){ errors.push('YouTube: '+e.message); }
-    }
-    if(IG_TOKEN && IG_ACCOUNT){
-      setLoading('Fetching Instagram Reels...');
-      try{ await fetchIG(); }catch(e){ errors.push('Instagram: '+e.message); }
-    }
-    if(MC_KEY){
-      setLoading('Fetching Mailchimp campaigns...');
-      try{ await fetchMC(); }catch(e){ errors.push('Mailchimp: '+e.message); }
-    }
-    if(WOO_CK && WOO_CS){
-      setLoading('Fetching WooCommerce sales...');
-      try{ await fetchWoo(); }catch(e){ errors.push('WooCommerce: '+e.message); }
-    }
+    setLoading('Fetching all platforms in parallel...');
+    // All platforms fetch simultaneously — total load time is now the slowest
+    // single platform rather than the sum of all four.
+    const tasks=[];
+    if(YT_KEY)tasks.push(fetchYT().catch(e=>errors.push('YouTube: '+e.message)));
+    if(IG_TOKEN && IG_ACCOUNT)tasks.push(fetchIG().catch(e=>errors.push('Instagram: '+e.message)));
+    if(MC_KEY)tasks.push(fetchMC().catch(e=>errors.push('Mailchimp: '+e.message)));
+    if(WOO_CK && WOO_CS)tasks.push(fetchWoo().catch(e=>errors.push('WooCommerce: '+e.message)));
+    await Promise.all(tasks);
     document.getElementById('lastUpdated').textContent='Updated '+new Date().toLocaleTimeString();
     show('appView');
     renderAll();
@@ -521,9 +538,16 @@ async function refreshAll(){
 }
 
 // ---- YOUTUBE ----
+// Fetch with a hard timeout so one hung request can never freeze the whole load.
+async function fetchT(url,ms=15000){
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(),ms);
+  try{ return await fetch(url,{signal:ctl.signal}); }
+  finally{ clearTimeout(t); }
+}
 async function ytFetch(path){
   const sep=path.includes('?')?'&':'?';
-  const r=await fetch(`https://www.googleapis.com/youtube/v3/${path}${sep}key=${YT_KEY}`);
+  const r=await fetchT(`https://www.googleapis.com/youtube/v3/${path}${sep}key=${YT_KEY}`);
   const d=await r.json();
   if(d.error)throw new Error(d.error.message);
   return d;
@@ -562,7 +586,7 @@ function parseDur(d){if(!d)return 0;const m=d.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:
 // ---- INSTAGRAM ----
 async function igFetch(path){
   const sep=path.includes('?')?'&':'?';
-  const r=await fetch(`https://graph.facebook.com/${IG_VERSION}/${path}${sep}access_token=${IG_TOKEN}`);
+  const r=await fetchT(`https://graph.facebook.com/${IG_VERSION}/${path}${sep}access_token=${IG_TOKEN}`);
   const d=await r.json();
   if(d.error)throw new Error(d.error.message);
   return d;
@@ -573,45 +597,68 @@ async function fetchIG(){
     const prof=await igFetch(`${IG_ACCOUNT}?fields=followers_count`);
     if(prof.followers_count)recordFollowers('instagram',prof.followers_count);
   }catch(e){}
-  // Get media list (reels + videos)
+  // Media back to January 1st of this year
+  const sinceJan=new Date(new Date().getFullYear(),0,1);
   let media=[],after='';
   do{
     const d=await igFetch(`${IG_ACCOUNT}/media?fields=id,caption,media_type,media_product_type,timestamp,permalink,like_count,comments_count&limit=50${after?'&after='+after:''}`);
-    media.push(...(d.data||[]));
+    const items=d.data||[];
+    media.push(...items);
     after=(d.paging&&d.paging.cursors&&d.paging.next)?d.paging.cursors.after:'';
-  }while(after&&media.length<400);
+    const oldest=items.length?new Date(items[items.length-1].timestamp):null;
+    if(oldest&&oldest<sinceJan)break; // gone far enough back
+  }while(after&&media.length<600);
 
-  // Keep reels / videos only
-  const reels=media.filter(m=>m.media_product_type==='REELS'||m.media_type==='VIDEO');
-  const out=[];
-  for(const m of reels){
-    // Request metrics one at a time. Meta rejects the WHOLE call if any single
-    // metric in a combined list is invalid for that media — which silently zeroed
-    // everything. Per-metric calls mean a missing one never kills the others.
-    const views = await igMetric(m.id, 'views');   // current Reels view count
-    const reach = await igMetric(m.id, 'reach');
-    const shares= await igMetric(m.id, 'shares');
-    const saves = await igMetric(m.id, 'saved');
-    const cap=(m.caption||'Untitled').split('\n')[0].slice(0,80);
-    out.push({id:m.id,platform:'instagram',title:cap,published:(m.timestamp||'').slice(0,10),
-      views:views||0,likes:m.like_count||0,comments:m.comments_count||0,shares:shares||0,saves:saves||0,reach:reach||0,
-      url:m.permalink||''});
+  const reels=media.filter(m=>(m.media_product_type==='REELS'||m.media_type==='VIDEO')&&new Date(m.timestamp)>=sinceJan);
+
+  // Insight cache: old Reels' stats barely move, so we only re-fetch insights
+  // for Reels published in the last 30 days (or never fetched). Everything else
+  // reads instantly from cache — this is what makes refreshes fast.
+  const cache=JSON.parse(localStorage.getItem('ig_insights')||'{}');
+  const now=Date.now();
+  const recentCutoff=now-30*864e5;
+  const need=reels.filter(m=>{
+    if(!cache[m.id])return true;
+    return new Date(m.timestamp).getTime()>=recentCutoff;
+  });
+
+  // Batched concurrent insight fetching (8 Reels at a time, 4 metrics each in parallel)
+  const BATCH=8;
+  for(let i=0;i<need.length;i+=BATCH){
+    const batch=need.slice(i,i+BATCH);
+    if(typeof setLoading==='function')setLoading(`Instagram insights ${Math.min(i+BATCH,need.length)}/${need.length}...`);
+    await Promise.all(batch.map(async m=>{
+      const [views,reach,shares,saves]=await Promise.all([
+        igMetric(m.id,'views'),igMetric(m.id,'reach'),igMetric(m.id,'shares'),igMetric(m.id,'saved')
+      ]);
+      cache[m.id]={views,reach,shares,saves,fetchedAt:now};
+    }));
   }
+  localStorage.setItem('ig_insights',JSON.stringify(cache));
+
+  // Build final list from media + cache in one atomic write
+  const out=reels.map(m=>{
+    const c=cache[m.id]||{};
+    const cap=(m.caption||'Untitled').split('\n')[0].slice(0,80);
+    return {id:m.id,platform:'instagram',title:cap,published:(m.timestamp||'').slice(0,10),
+      views:c.views||0,likes:m.like_count||0,comments:m.comments_count||0,shares:c.shares||0,saves:c.saves||0,reach:c.reach||0,
+      url:m.permalink||''};
+  });
   localStorage.setItem('ig_videos',JSON.stringify(out));
 }
 
 // Fetch a single insight metric for one media item. Returns 0 on any failure.
 async function igMetric(mediaId, metric){
-  // For views, try the broader play-count metrics first so numbers line up
-  // closer to the Instagram app's unified "Views" figure, then fall back.
+  // 'views' is the metric confirmed working for this account, so try it FIRST.
+  // (Previously we tried an aggregated metric that always failed here, wasting
+  // a request per Reel — a major cause of slow loads.)
   if(metric==='views'){
-    const tryOrder=['ig_reels_aggregated_all_plays_count','plays','views'];
-    for(const mt of tryOrder){
+    for(const mt of ['views','plays']){
       try{
         const ins=await igFetch(`${mediaId}/insights?metric=${mt}`);
         const row=(ins.data&&ins.data[0]);
         if(row && row.values && row.values[0] && row.values[0].value!=null) return row.values[0].value||0;
-      }catch(e){/* try next metric */}
+      }catch(e){/* try next */}
     }
     return 0;
   }
@@ -626,7 +673,7 @@ async function igMetric(mediaId, metric){
 // ---- MAILCHIMP (via Cloudflare proxy to avoid CORS) ----
 async function mcFetch(path){
   const url=`${MC_PROXY}?path=${encodeURIComponent(path)}&dc=${MC_DC}&key=${encodeURIComponent(MC_KEY)}`;
-  const r=await fetch(url);
+  const r=await fetchT(url,20000);
   const d=await r.json();
   if(d.error||d.status==='error'||d.title)throw new Error(d.detail||d.title||d.error||'Mailchimp error');
   return d;
@@ -685,17 +732,32 @@ async function fetchMC(){
 async function wooFetch(path,query){
   let url=`${MC_PROXY}?service=woocommerce&store=${encodeURIComponent(WOO_STORE)}&path=${encodeURIComponent(path)}&ck=${encodeURIComponent(WOO_CK)}&cs=${encodeURIComponent(WOO_CS)}`;
   if(query)url+=`&query=${encodeURIComponent(query)}`;
-  const r=await fetch(url);
+  const r=await fetchT(url,25000);
   const d=await r.json();
   if(d.code&&d.message)throw new Error(d.message);
   return d;
 }
 async function fetchWoo(){
-  // Sales report for different periods
-  const periods={};
-  for(const p of ['week','month','year']){
-    try{ periods[p]=await wooFetch('reports/sales',`period=${p}`); }catch(e){ periods[p]=null; }
+  // Sales report for different periods — fetched in parallel
+  const periodKeys=['week','month','year'];
+  const periodResults=await Promise.all(periodKeys.map(p=>wooFetch('reports/sales',`period=${p}`).catch(()=>null)));
+  const periods={}; periodKeys.forEach((p,i)=>periods[p]=periodResults[i]);
+
+  // Monthly sales history for the last 6 calendar months (for Monthly Trends)
+  const monthly=[];
+  const monthCalls=[];
+  const nowD=new Date();
+  for(let i=5;i>=0;i--){
+    const start=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
+    const end=new Date(nowD.getFullYear(),nowD.getMonth()-i+1,0);
+    const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+    const dmin=start.toISOString().slice(0,10), dmax=end.toISOString().slice(0,10);
+    monthCalls.push(wooFetch('reports/sales',`date_min=${dmin}&date_max=${dmax}`)
+      .then(r=>{const s=(r&&r[0])||{};monthly.push({label,ym:dmin.slice(0,7),net:Number(s.net_sales)||0,total:Number(s.total_sales)||0,orders:Number(s.total_orders)||0});})
+      .catch(()=>{monthly.push({label,ym:dmin.slice(0,7),net:0,total:0,orders:0});}));
   }
+  await Promise.all(monthCalls);
+  monthly.sort((a,b)=>a.ym.localeCompare(b.ym));
   // Product -> category map. Fetch ALL statuses (publish, draft, private) so
   // every product that could appear in sales gets categorised. Page up to 1000.
   const catMap={};
@@ -760,6 +822,7 @@ async function fetchWoo(){
     periods:{},
     topByPeriod:topByPeriod,
     catMap:catMap,
+    monthly:monthly,
     fetchedAt:new Date().toISOString()
   };
   for(const p of ['week','month','year']){
@@ -790,7 +853,7 @@ function setFilter(f,el){
   currentPage='overview';
   const dateBar=document.querySelector('.date-bar');
   if(dateBar)dateBar.style.display='flex';
-  ['overview','compare','growth','followers','email','store','report','videos'].forEach(pg=>{
+  ['overview','compare','growth','followers','email','store','report','monthly','ytlong','videos'].forEach(pg=>{
     const elp=document.getElementById('page-'+pg);
     if(elp)elp.style.display=pg==='overview'?'block':'none';
   });
@@ -798,20 +861,20 @@ function setFilter(f,el){
 }
 function showPage(p){
   currentPage=p;
-  ['overview','compare','growth','followers','email','store','report','ytlong','videos'].forEach(pg=>{
+  ['overview','compare','growth','followers','email','store','report','monthly','ytlong','videos'].forEach(pg=>{
     const elp=document.getElementById('page-'+pg);
     if(elp)elp.style.display=pg===p?'block':'none';
   });
-  // Email, Store, Report & YT Videos behave like their own sections
-  if(p==='email'||p==='store'||p==='report'||p==='ytlong'){
+  // Email, Store, Report, Monthly & YT Videos behave like their own sections
+  if(p==='email'||p==='store'||p==='report'||p==='ytlong'||p==='monthly'){
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    const label=p==='email'?'Email':p==='store'?'Store':p==='report'?'Weekly Report':'YouTube Videos';
+    const label=p==='email'?'Email':p==='store'?'Store':p==='report'?'Weekly Report':p==='monthly'?'Monthly Trends':'YouTube Videos';
     const nav=[...document.querySelectorAll('.nav-item')].find(n=>n.textContent.includes(label));
     if(nav)nav.classList.add('active');
-    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (WooCommerce)':p==='report'?'Weekly Report':'YouTube Videos';
+    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (WooCommerce)':p==='report'?'Weekly Report':p==='monthly'?'Monthly Trends':'YouTube Videos';
   }
   const dateBar=document.querySelector('.date-bar');
-  if(dateBar)dateBar.style.display=(p==='store'||p==='report'||p==='ytlong')?'none':'flex';
+  if(dateBar)dateBar.style.display=(p==='store'||p==='report'||p==='ytlong'||p==='monthly')?'none':'flex';
   renderAll();
 }
 function setOrder(dir,el){sortDir=dir;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderVideosPage();}
@@ -822,7 +885,7 @@ function openSettings(){
   if(t&&t.trim()){localStorage.setItem('ig_token',t.trim());IG_TOKEN=t.trim();alert('Token updated. Click Refresh to reload Instagram.');}
 }
 function logout(){
-  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','mc_key','mc_campaigns','followers_mailchimp','woo_ck','woo_cs','woo_data'].forEach(k=>localStorage.removeItem(k));
+  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','ig_insights','mc_key','mc_campaigns','followers_mailchimp','woo_ck','woo_cs','woo_data'].forEach(k=>localStorage.removeItem(k));
   YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';WOO_CK='';WOO_CS='';
   Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
   show('setupView');
@@ -841,6 +904,7 @@ function renderAll(){
   if(currentPage==='email')renderEmail();
   if(currentPage==='store')renderStore();
   if(currentPage==='report')renderReport();
+  if(currentPage==='monthly')renderMonthly();
   if(currentPage==='ytlong')renderYtLong();
   if(currentPage==='videos')renderVideosPage();
 }
@@ -1162,7 +1226,7 @@ function renderReport(){
 
   const wins=[], improves=[], next=[];
   if(topVid)wins.push(`Top content: "${topVid.title}" pulled ${fmt(topVid.views)} views on ${topVid.platform==='youtube'?'YouTube':'Instagram'}.`);
-  if(weekSales>0)wins.push(`Store generated ${money(weekSales)} across ${fmt(weekOrders)} orders (avg ${money(aov)}/order).`);
+  if(weekNet>0)wins.push(`Store generated ${money(weekNet)} net across ${fmt(weekOrders)} orders (avg ${money(aov)}/order).`);
   if(igGain!==null&&igGain>0)wins.push(`Instagram following grew by ${fmt(igGain)}.`);
   if(ytGain!==null&&ytGain>0)wins.push(`YouTube subscribers up ${fmt(ytGain)}.`);
   if(mcGain!==null&&mcGain>0)wins.push(`Email list grew by ${fmt(mcGain)} subscribers.`);
@@ -1286,6 +1350,74 @@ function renderYtLong(){
       <td style="font-family:var(--mono);text-align:right;">${fmt(v.comments)}</td>
       <td style="text-align:right;"><span class="eng-badge ${engRate(v)>=3?'eg':engRate(v)>=1?'ea':'er'}">${engRate(v).toFixed(1)}%</span></td>
     </tr>`).join('');
+}
+
+function renderMonthly(){
+  // Build last-6-month buckets
+  const nowD=new Date();
+  const months=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
+    months.push({ym:d.toISOString().slice(0,7),label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'})});
+  }
+  const inMonth=(dateStr,ym)=>dateStr&&dateStr.slice(0,7)===ym;
+
+  const data=getData();
+  const longform=JSON.parse(localStorage.getItem('yt_longform')||'[]');
+  const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
+  const woo=JSON.parse(localStorage.getItem('woo_data')||'null');
+  const wooMonthly=(woo&&woo.monthly)||[];
+
+  const rows=months.map(m=>{
+    const sh=data.youtube.filter(v=>inMonth(v.published,m.ym));
+    const rl=data.instagram.filter(v=>inMonth(v.published,m.ym));
+    const lf=longform.filter(v=>inMonth(v.published,m.ym));
+    const shViews=sh.reduce((s,v)=>s+v.views,0);
+    const rlViews=rl.reduce((s,v)=>s+v.views,0);
+    const lfViews=lf.reduce((s,v)=>s+v.views,0);
+    const posts=sh.length+rl.length+lf.length;
+    const emailRev=camps.filter(c=>inMonth(c.sendTime,m.ym)).reduce((s,c)=>s+(Number(c.revenue)||0),0);
+    const wm=wooMonthly.find(x=>x.ym===m.ym)||{net:0,orders:0};
+    return {...m,shViews,rlViews,lfViews,totalViews:shViews+rlViews+lfViews,posts,emailRev,net:wm.net,orders:wm.orders};
+  });
+
+  // Charts
+  const labels=rows.map(r=>r.label);
+  if(charts['monthlyContentChart']){try{charts['monthlyContentChart'].destroy();}catch(e){}}
+  const ctx=document.getElementById('monthlyContentChart');
+  if(ctx){
+    charts['monthlyContentChart']=new Chart(ctx,{type:'bar',
+      data:{labels,datasets:[
+        {label:'Shorts',data:rows.map(r=>r.shViews),backgroundColor:'#ff4d4dbb'},
+        {label:'Reels',data:rows.map(r=>r.rlViews),backgroundColor:'#e1306cbb'},
+        {label:'Long-form',data:rows.map(r=>r.lfViews),backgroundColor:'#cc0000bb'}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#9fb3d9',font:{size:11},padding:12}}},
+        scales:{x:{stacked:true,ticks:{color:'#7088b5'},grid:{display:false}},y:{stacked:true,ticks:{color:'#7088b5',callback:v=>fmt(v)},grid:{color:'rgba(120,160,255,0.08)'}}}}});
+  }
+  mk('monthlySalesChart','bar',labels,rows.map(r=>+r.net.toFixed(0)),'#4ade80');
+  mk('monthlyEmailChart','bar',labels,rows.map(r=>+r.emailRev.toFixed(0)),'#ffe01b');
+
+  // Table with month-over-month change on total views
+  const body=document.getElementById('monthlyTableBody');
+  if(body)body.innerHTML=rows.map((r,i)=>{
+    const prev=i>0?rows[i-1]:null;
+    let delta='—';
+    if(prev&&prev.totalViews>0){
+      const pct=((r.totalViews-prev.totalViews)/prev.totalViews)*100;
+      const cls=pct>=0?'eg':'er';
+      delta=`<span class="eng-badge ${cls}">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
+    }
+    return `<tr>
+      <td style="font-weight:600;">${r.label}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(r.totalViews)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${r.posts}</td>
+      <td style="font-family:var(--mono);text-align:right;">${money(r.net)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${fmt(r.orders)}</td>
+      <td style="font-family:var(--mono);text-align:right;">${money(r.emailRev)}</td>
+      <td style="text-align:right;">${delta}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderVideosPage(){
