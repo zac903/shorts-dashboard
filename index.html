@@ -738,20 +738,34 @@ async function wooFetch(path,query){
   return d;
 }
 async function fetchWoo(){
-  // Sales report for different periods — fetched in parallel
+  const nowD=new Date();
+  // "This week" = Friday-to-Friday: from the most recent Friday through today.
+  const dsf=(nowD.getDay()-5+7)%7;
+  const lastFri=new Date(nowD); lastFri.setDate(nowD.getDate()-dsf); lastFri.setHours(0,0,0,0);
+  const iso=d=>d.toISOString().slice(0,10);
+  const monthStart=new Date(nowD.getFullYear(),nowD.getMonth(),1);
+  const yearStart=new Date(nowD.getFullYear(),0,1);
+  const ranges={
+    week:{from:iso(lastFri),to:iso(nowD)},
+    month:{from:iso(monthStart),to:iso(nowD)},
+    year:{from:iso(yearStart),to:iso(nowD)}
+  };
+  // Sales reports fetched in parallel with explicit date ranges (so we always
+  // know and can show exactly which dates each period covers).
   const periodKeys=['week','month','year'];
-  const periodResults=await Promise.all(periodKeys.map(p=>wooFetch('reports/sales',`period=${p}`).catch(()=>null)));
+  const periodResults=await Promise.all(periodKeys.map(p=>
+    wooFetch('reports/sales',`date_min=${ranges[p].from}&date_max=${ranges[p].to}`).catch(()=>null)));
   const periods={}; periodKeys.forEach((p,i)=>periods[p]=periodResults[i]);
 
-  // Monthly sales history for the last 6 calendar months (for Monthly Trends)
+  // Monthly sales history since January (for Monthly Trends)
   const monthly=[];
   const monthCalls=[];
-  const nowD=new Date();
-  for(let i=5;i>=0;i--){
+  const monthsBack=nowD.getMonth(); // Jan = index 0
+  for(let i=monthsBack;i>=0;i--){
     const start=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
     const end=new Date(nowD.getFullYear(),nowD.getMonth()-i+1,0);
     const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
-    const dmin=start.toISOString().slice(0,10), dmax=end.toISOString().slice(0,10);
+    const dmin=iso(start), dmax=iso(end);
     monthCalls.push(wooFetch('reports/sales',`date_min=${dmin}&date_max=${dmax}`)
       .then(r=>{const s=(r&&r[0])||{};monthly.push({label,ym:dmin.slice(0,7),net:Number(s.net_sales)||0,total:Number(s.total_sales)||0,orders:Number(s.total_orders)||0});})
       .catch(()=>{monthly.push({label,ym:dmin.slice(0,7),net:0,total:0,orders:0});}));
@@ -777,10 +791,9 @@ async function fetchWoo(){
 
   // Build per-product sales. Week & month from real orders (accurate);
   // year from the top_sellers report (orders volume too high to page fully).
-  const now=new Date();
   const cutoffs={
-    week:new Date(now.getTime()-7*864e5),
-    month:new Date(now.getFullYear(),now.getMonth()-1,now.getDate())
+    week:lastFri,                                            // Fri-Fri, matches sales range
+    month:new Date(nowD.getFullYear(),nowD.getMonth(),1)     // current calendar month
   };
   const pageCaps={week:8,month:30}; // ~800 and ~3000 orders headroom
   const salesByPeriod={week:{},month:{},year:{}};
@@ -823,6 +836,7 @@ async function fetchWoo(){
     topByPeriod:topByPeriod,
     catMap:catMap,
     monthly:monthly,
+    ranges:ranges,
     fetchedAt:new Date().toISOString()
   };
   for(const p of ['week','month','year']){
@@ -1126,8 +1140,14 @@ function renderStore(){
   }
   const p=data.periods[wooPeriod]||{totalSales:0,netSales:0,totalOrders:0,totalItems:0,totalCustomers:0,daily:[]};
   const aov=p.totalOrders>0?(p.totalSales/p.totalOrders):0;
+  // Explicit date range for the selected period (week = Friday to today)
+  const rg=(data.ranges&&data.ranges[wooPeriod])||null;
+  const fmtR=s=>{const d=new Date(s);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});};
+  const rangeLabel=rg?`${fmtR(rg.from)} – ${fmtR(rg.to)}`:('this '+wooPeriod);
+  const rangeNote=wooPeriod==='week'?' (Fri–Fri week)':'';
   document.getElementById('storeMetrics').innerHTML=`
-    <div class="metric-card"><div class="metric-label">Total sales</div><div class="metric-value c-green">${money(p.totalSales)}</div><div class="metric-sub">this ${wooPeriod}</div></div>
+    <div class="metric-card" style="grid-column:1/-1;padding:10px 16px;"><div style="font-size:13px;color:var(--muted2);">📅 Showing <strong style="color:var(--text);">${rangeLabel}</strong>${rangeNote}</div></div>
+    <div class="metric-card"><div class="metric-label">Total sales</div><div class="metric-value c-green">${money(p.totalSales)}</div><div class="metric-sub">${rangeLabel}</div></div>
     <div class="metric-card"><div class="metric-label">Net sales</div><div class="metric-value c-blue">${money(p.netSales)}</div></div>
     <div class="metric-card"><div class="metric-label">Orders</div><div class="metric-value">${fmt(p.totalOrders)}</div></div>
     <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${money(aov)}</div></div>
@@ -1353,10 +1373,10 @@ function renderYtLong(){
 }
 
 function renderMonthly(){
-  // Build last-6-month buckets
+  // Build month buckets from January of the current year through now
   const nowD=new Date();
   const months=[];
-  for(let i=5;i>=0;i--){
+  for(let i=nowD.getMonth();i>=0;i--){
     const d=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
     months.push({ym:d.toISOString().slice(0,7),label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'})});
   }
