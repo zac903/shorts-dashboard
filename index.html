@@ -742,7 +742,10 @@ async function fetchWoo(){
   // "This week" = Friday-to-Friday: from the most recent Friday through today.
   const dsf=(nowD.getDay()-5+7)%7;
   const lastFri=new Date(nowD); lastFri.setDate(nowD.getDate()-dsf); lastFri.setHours(0,0,0,0);
-  const iso=d=>d.toISOString().slice(0,10);
+  // IMPORTANT: build date strings from LOCAL date parts. Using toISOString()
+  // converts to UTC, which in UK summer time shifted "Friday 00:00" back to
+  // Thursday — making the week start a day early and inflating totals.
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const monthStart=new Date(nowD.getFullYear(),nowD.getMonth(),1);
   const yearStart=new Date(nowD.getFullYear(),0,1);
   const ranges={
