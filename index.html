@@ -179,7 +179,6 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <button class="nav-item" onclick="showPage('monthly')"><span class="nav-dot" style="background:#a78bfa;"></span> Monthly Trends</button>
       <div class="nav-section">Views</div>
       <button class="nav-item" onclick="showPage('overview')">📈 Overview</button>
-      <button class="nav-item" onclick="showPage('compare')">⚖️ Compare</button>
       <button class="nav-item" onclick="showPage('growth')">📅 Growth</button>
       <button class="nav-item" onclick="showPage('followers')">👥 Followers</button>
       <button class="nav-item" onclick="showPage('videos')">🎬 All videos</button>
@@ -237,19 +236,6 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
               <tbody id="overviewListBody"></tbody>
             </table>
           </div>
-        </div>
-        <div id="page-compare" style="display:none;">
-          <div class="two-col" style="margin-bottom:1rem;">
-            <div class="chart-card">
-              <div class="chart-label">Total views by platform</div>
-              <div style="position:relative;height:220px;"><canvas id="platformViewsChart"></canvas></div>
-            </div>
-            <div class="chart-card">
-              <div class="chart-label">Avg engagement rate by platform</div>
-              <div style="position:relative;height:220px;"><canvas id="platformEngChart"></canvas></div>
-            </div>
-          </div>
-          <div class="chart-card" id="compareStatsCard"></div>
         </div>
         <div id="page-growth" style="display:none;">
           <div class="chart-card">
@@ -800,15 +786,27 @@ async function fetchWoo(){
   };
   const pageCaps={week:8,month:30}; // ~800 and ~3000 orders headroom
   const salesByPeriod={week:{},month:{},year:{}};
+  // Store-attributed email revenue: WooCommerce records which orders arrived
+  // via a Mailchimp campaign (_wc_order_attribution_utm_source). This is far
+  // more honest than Mailchimp's own attribution, which credits campaigns with
+  // every later order a clicker places and can massively over-inflate.
+  const emailAttr={revenue:0,orders:0};
 
   for(const per of ['week','month']){
     try{
       let page=1, more=true;
       while(more && page<=pageCaps[per]){
         if(typeof setLoading==='function')setLoading(`Reading ${per} orders (page ${page})...`);
-        const orders=await wooFetch('orders',`per_page=100&page=${page}&status=completed,processing&after=${cutoffs[per].toISOString()}&_fields=id,date_created,line_items`);
+        const flds='id,date_created,total,line_items'+(per==='week'?',meta_data':'');
+        const orders=await wooFetch('orders',`per_page=100&page=${page}&status=completed,processing&after=${cutoffs[per].toISOString()}&_fields=${flds}`);
         if(!orders||!orders.length){more=false;break;}
         for(const o of orders){
+          if(per==='week'&&Array.isArray(o.meta_data)){
+            const src=o.meta_data.find(m=>m.key==='_wc_order_attribution_utm_source');
+            if(src&&String(src.value).toLowerCase()==='mailchimp'){
+              emailAttr.revenue+=Number(o.total)||0; emailAttr.orders++;
+            }
+          }
           for(const li of (o.line_items||[])){
             const pid=li.product_id, qty=Number(li.quantity)||0, nm=li.name;
             if(!salesByPeriod[per][pid])salesByPeriod[per][pid]={name:nm,productId:pid,quantity:0};
@@ -840,6 +838,7 @@ async function fetchWoo(){
     catMap:catMap,
     monthly:monthly,
     ranges:ranges,
+    emailAttributed:emailAttr,
     fetchedAt:new Date().toISOString()
   };
   for(const p of ['week','month','year']){
@@ -915,7 +914,6 @@ function renderAll(){
   updateDateSpan(videos);
   renderMetrics(videos);
   if(currentPage==='overview')renderOverview(videos);
-  if(currentPage==='compare')renderCompare();
   if(currentPage==='growth')renderGrowth(videos);
   if(currentPage==='followers')renderFollowers();
   if(currentPage==='email')renderEmail();
@@ -1055,7 +1053,8 @@ function renderEmail(){
   const subs=latestFollowers('mailchimp');
   document.getElementById('emailMetrics').innerHTML=`
     <div class="metric-card"><div class="metric-label">Campaigns sent</div><div class="metric-value">${camps.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Total revenue</div><div class="metric-value c-green">${money(totalRevenue)}</div><div class="metric-sub">${fmt(totalOrders)} orders tracked</div></div>
+    <div class="metric-card"><div class="metric-label">Email revenue this week</div><div class="metric-value c-green">${(()=>{const w=JSON.parse(localStorage.getItem('woo_data')||'null');const ea=w&&w.emailAttributed;return ea?money(ea.revenue):'—';})()}</div><div class="metric-sub">${(()=>{const w=JSON.parse(localStorage.getItem('woo_data')||'null');const ea=w&&w.emailAttributed;return ea?fmt(ea.orders)+' orders · store-attributed':'refresh to load';})()}</div></div>
+    <div class="metric-card"><div class="metric-label">Mailchimp-reported (all time)</div><div class="metric-value" style="color:var(--muted2);">${money(totalRevenue)}</div><div class="metric-sub">${fmt(totalOrders)} orders · generous attribution</div></div>
     <div class="metric-card"><div class="metric-label">Subscribers</div><div class="metric-value" style="color:#ffe01b;">${fmt(subs)}</div></div>
     <div class="metric-card"><div class="metric-label">Total emails sent</div><div class="metric-value c-blue">${fmt(totalSent)}</div></div>
     <div class="metric-card"><div class="metric-label">Avg open rate</div><div class="metric-value c-green">${avgOpen}%</div></div>
@@ -1245,6 +1244,9 @@ function renderReport(){
   const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
   const weekCamps=camps.filter(c=>{if(!c.sendTime)return false;const dt=new Date(c.sendTime);return dt>=wStart&&dt<wEnd;});
   const campRevenue=weekCamps.reduce((s,c)=>s+(Number(c.revenue)||0),0);
+  // Prefer WooCommerce's own attribution for the current week — Mailchimp's
+  // figure over-credits campaigns and can be wildly inflated.
+  const storeEmailAttr=(isRecent&&woo&&woo.emailAttributed)?woo.emailAttributed:null;
   const topVid=[...weekVids].sort((a,b)=>b.views-a.views)[0];
 
   const wins=[], improves=[], next=[];
@@ -1253,7 +1255,8 @@ function renderReport(){
   if(igGain!==null&&igGain>0)wins.push(`Instagram following grew by ${fmt(igGain)}.`);
   if(ytGain!==null&&ytGain>0)wins.push(`YouTube subscribers up ${fmt(ytGain)}.`);
   if(mcGain!==null&&mcGain>0)wins.push(`Email list grew by ${fmt(mcGain)} subscribers.`);
-  if(campRevenue>0)wins.push(`Email campaigns drove ${money(campRevenue)} in tracked revenue.`);
+  if(storeEmailAttr&&storeEmailAttr.revenue>0)wins.push(`Email drove ${money(storeEmailAttr.revenue)} across ${fmt(storeEmailAttr.orders)} orders (store-attributed; Mailchimp claims ${money(campRevenue)}).`);
+  else if(campRevenue>0)wins.push(`Email campaigns drove ${money(campRevenue)} in Mailchimp-reported revenue (note: Mailchimp attribution is generous).`);
   if(weekVids.length>=3)wins.push(`Strong publishing cadence — ${weekVids.length} pieces of content went out.`);
 
   if(weekVids.length===0)improves.push(`No new content published in this window — consistency drives reach.`);
