@@ -273,6 +273,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
           <div class="filter-bar" style="margin-bottom:1rem;">
             <span class="filter-label">Period:</span>
             <button class="filter-btn active" id="wooWeek" onclick="setWooPeriod('week',this)">This week</button>
+            <button class="filter-btn" id="wooLastWeek" onclick="setWooPeriod('lastweek',this)">Last week</button>
             <button class="filter-btn" id="wooMonth" onclick="setWooPeriod('month',this)">This month</button>
             <button class="filter-btn" id="wooYear" onclick="setWooPeriod('year',this)">This year</button>
           </div>
@@ -291,6 +292,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
               <div style="display:flex;gap:6px;">
                 <button class="filter-btn active" id="sellBest" onclick="setSellMode('best',this)">Best sellers</button>
                 <button class="filter-btn" id="sellWorst" onclick="setSellMode('worst',this)">Worst sellers</button>
+                <button class="filter-btn" id="sellDead" onclick="setSellMode('dead',this)">Deadstock</button>
               </div>
             </div>
             <div class="filter-bar" style="margin-bottom:1rem;">
@@ -734,14 +736,17 @@ async function fetchWoo(){
   const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const monthStart=new Date(nowD.getFullYear(),nowD.getMonth(),1);
   const yearStart=new Date(nowD.getFullYear(),0,1);
+  const prevFri=new Date(lastFri); prevFri.setDate(lastFri.getDate()-7);
+  const lastWeekEnd=new Date(lastFri); lastWeekEnd.setDate(lastFri.getDate()-1);
   const ranges={
     week:{from:iso(lastFri),to:iso(nowD)},
+    lastweek:{from:iso(prevFri),to:iso(lastWeekEnd)},
     month:{from:iso(monthStart),to:iso(nowD)},
     year:{from:iso(yearStart),to:iso(nowD)}
   };
   // Sales reports fetched in parallel with explicit date ranges (so we always
   // know and can show exactly which dates each period covers).
-  const periodKeys=['week','month','year'];
+  const periodKeys=['week','lastweek','month','year'];
   const periodResults=await Promise.all(periodKeys.map(p=>
     wooFetch('reports/sales',`date_min=${ranges[p].from}&date_max=${ranges[p].to}`).catch(()=>null)));
   const periods={}; periodKeys.forEach((p,i)=>periods[p]=periodResults[i]);
@@ -752,7 +757,11 @@ async function fetchWoo(){
   const monthsBack=nowD.getMonth(); // Jan = index 0
   for(let i=monthsBack;i>=0;i--){
     const start=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
-    const end=new Date(nowD.getFullYear(),nowD.getMonth()-i+1,0);
+    // Never request a future date_max — the legacy reports endpoint returns
+    // inflated figures for ranges that end in the future. Clamp the current
+    // month to today.
+    let end=new Date(nowD.getFullYear(),nowD.getMonth()-i+1,0);
+    if(end>nowD)end=new Date(nowD);
     const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
     const dmin=iso(start), dmax=iso(end);
     monthCalls.push(wooFetch('reports/sales',`date_min=${dmin}&date_max=${dmax}`)
@@ -764,14 +773,19 @@ async function fetchWoo(){
   // Product -> category map. Fetch ALL statuses (publish, draft, private) so
   // every product that could appear in sales gets categorised. Page up to 1000.
   const catMap={};
+  const catalog=[];
   try{
     let page=1, more=true;
     while(more && page<=10){
-      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories`);
+      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories,status,stock_status,total_sales`);
       if(!prods||!prods.length){more=false;break;}
       for(const pr of prods){
         const slugs=(pr.categories||[]).map(c=>c.slug);
         catMap[pr.id]=slugs;
+        // Catalogue snapshot for deadstock: live, in-stock products only
+        if(pr.status==='publish'){
+          catalog.push({id:pr.id,name:pr.name,instock:pr.stock_status==='instock',lifetime:Number(pr.total_sales)||0});
+        }
       }
       if(prods.length<100)more=false;
       page++;
@@ -781,24 +795,26 @@ async function fetchWoo(){
   // Build per-product sales. Week & month from real orders (accurate);
   // year from the top_sellers report (orders volume too high to page fully).
   const cutoffs={
-    week:lastFri,                                            // Fri-Fri, matches sales range
-    month:new Date(nowD.getFullYear(),nowD.getMonth(),1)     // current calendar month
+    week:{after:lastFri},
+    lastweek:{after:prevFri,before:lastFri},
+    month:{after:new Date(nowD.getFullYear(),nowD.getMonth(),1)}
   };
-  const pageCaps={week:8,month:30}; // ~800 and ~3000 orders headroom
-  const salesByPeriod={week:{},month:{},year:{}};
+  const pageCaps={week:8,lastweek:8,month:30}; // ~800/~800/~3000 orders headroom
+  const salesByPeriod={week:{},lastweek:{},month:{},year:{}};
   // Store-attributed email revenue: WooCommerce records which orders arrived
   // via a Mailchimp campaign (_wc_order_attribution_utm_source). This is far
   // more honest than Mailchimp's own attribution, which credits campaigns with
   // every later order a clicker places and can massively over-inflate.
   const emailAttr={revenue:0,orders:0};
 
-  for(const per of ['week','month']){
+  for(const per of ['week','lastweek','month']){
     try{
       let page=1, more=true;
       while(more && page<=pageCaps[per]){
         if(typeof setLoading==='function')setLoading(`Reading ${per} orders (page ${page})...`);
         const flds='id,date_created,total,line_items'+(per==='week'?',meta_data':'');
-        const orders=await wooFetch('orders',`per_page=100&page=${page}&status=completed,processing&after=${cutoffs[per].toISOString()}&_fields=${flds}`);
+        const rangeQ=`after=${cutoffs[per].after.toISOString()}`+(cutoffs[per].before?`&before=${cutoffs[per].before.toISOString()}`:'');
+        const orders=await wooFetch('orders',`per_page=100&page=${page}&status=completed,processing&${rangeQ}&_fields=${flds}`);
         if(!orders||!orders.length){more=false;break;}
         for(const o of orders){
           if(per==='week'&&Array.isArray(o.meta_data)){
@@ -828,7 +844,7 @@ async function fetchWoo(){
   }catch(e){}
 
   const topByPeriod={};
-  for(const per of ['week','month','year']){
+  for(const per of ['week','lastweek','month','year']){
     topByPeriod[per]=Object.values(salesByPeriod[per]).sort((a,b)=>b.quantity-a.quantity);
   }
 
@@ -839,9 +855,10 @@ async function fetchWoo(){
     monthly:monthly,
     ranges:ranges,
     emailAttributed:emailAttr,
+    catalog:catalog,
     fetchedAt:new Date().toISOString()
   };
-  for(const p of ['week','month','year']){
+  for(const p of ['week','lastweek','month','year']){
     const data=periods[p];
     if(data&&data[0]){
       const s=data[0];
@@ -1076,7 +1093,7 @@ function renderEmail(){
 
 function setWooPeriod(p,el){
   wooPeriod=p;
-  document.querySelectorAll('#page-store .filter-btn.active').forEach(b=>{ if(b.id==='wooWeek'||b.id==='wooMonth'||b.id==='wooYear')b.classList.remove('active'); });
+  document.querySelectorAll('#page-store .filter-btn.active').forEach(b=>{ if(b.id==='wooWeek'||b.id==='wooLastWeek'||b.id==='wooMonth'||b.id==='wooYear')b.classList.remove('active'); });
   el.classList.add('active');
   renderStore();
 }
@@ -1089,8 +1106,7 @@ function setProdType(t,el){
 }
 function setSellMode(m,el){
   sellMode=m;
-  document.getElementById('sellBest').classList.remove('active');
-  document.getElementById('sellWorst').classList.remove('active');
+  ['sellBest','sellWorst','sellDead'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
   el.classList.add('active');
   renderStoreProducts();
 }
@@ -1146,7 +1162,7 @@ function renderStore(){
   const rg=(data.ranges&&data.ranges[wooPeriod])||null;
   const fmtR=s=>{const d=new Date(s);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});};
   const rangeLabel=rg?`${fmtR(rg.from)} – ${fmtR(rg.to)}`:('this '+wooPeriod);
-  const rangeNote=wooPeriod==='week'?' (Fri–Fri week)':'';
+  const rangeNote=wooPeriod==='week'?' (Fri–Fri week)':wooPeriod==='lastweek'?' (completed Fri–Fri week)':'';
   document.getElementById('storeMetrics').innerHTML=`
     <div class="metric-card" style="grid-column:1/-1;padding:10px 16px;"><div style="font-size:13px;color:var(--muted2);">📅 Showing <strong style="color:var(--text);">${rangeLabel}</strong>${rangeNote}</div></div>
     <div class="metric-card"><div class="metric-label">Total sales</div><div class="metric-value c-green">${money(p.totalSales)}</div><div class="metric-sub">${rangeLabel}</div></div>
@@ -1161,16 +1177,41 @@ function renderStore(){
   mk('storeOrdersChart','bar',labels,daily.map(d=>d.orders),'#96588a');
   renderStoreProducts();
 }
+// Deadstock = published, in-stock products with ZERO sales across all the real
+// order data we hold (current week + last Fri-Fri week + current month).
+// Sorted by lifetime units sold (desc) so formerly-good sellers gone cold
+// surface first — those are the ones costing you, vs brand-new arrivals.
+function renderDeadstock(data){
+  const catalog=data.catalog||[];
+  const label=document.getElementById('storeTopLabel');
+  if(!catalog.length){
+    if(label)label.textContent='Deadstock';
+    document.getElementById('storeTopBody').innerHTML='<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">Refresh to load catalogue data (deadstock needs the newest fetch).</td></tr>';
+    return;
+  }
+  const sold=new Set();
+  ['week','lastweek','month'].forEach(per=>((data.topByPeriod&&data.topByPeriod[per])||[]).forEach(p=>sold.add(p.productId)));
+  const from=(data.ranges&&data.ranges.lastweek)?data.ranges.lastweek.from:(data.ranges&&data.ranges.month?data.ranges.month.from:null);
+  const fmtF=s=>s?new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'recently';
+  let dead=catalog.filter(p=>p.instock&&!sold.has(p.id)&&matchesType({productId:p.id,name:p.name}));
+  dead.sort((a,b)=>b.lifetime-a.lifetime);
+  if(label)label.textContent=`Deadstock · no sales since ${fmtF(from)} (${dead.length} in-stock products)`;
+  document.getElementById('storeTopBody').innerHTML=dead.slice(0,25).map(p=>`
+    <tr><td>${p.name}</td>
+    <td style="font-family:var(--mono);color:var(--muted2);">${fmt(p.lifetime)} lifetime</td></tr>`).join('')
+    ||'<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">Nothing flagged — everything in this category has sold recently.</td></tr>';
+}
 function renderStoreProducts(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
   if(!data){return;}
+  if(sellMode==='dead'){renderDeadstock(data);return;}
   const top=(data.topByPeriod&&data.topByPeriod[wooPeriod])||[];
   let filtered=top.filter(t=>matchesType(t));
   // sort best or worst
   filtered=[...filtered].sort((a,b)=> sellMode==='best' ? b.quantity-a.quantity : a.quantity-b.quantity);
   filtered=filtered.slice(0,15);
   const label=document.getElementById('storeTopLabel');
-  if(label)label.textContent=(sellMode==='best'?'Best':'Worst')+' selling '+(prodType==='all'?'products':prodType+'s')+' · this '+wooPeriod;
+  if(label){const perL={week:'this week',lastweek:'last week',month:'this month',year:'this year'}[wooPeriod]||wooPeriod;label.textContent=(sellMode==='best'?'Best':'Worst')+' selling '+(prodType==='all'?'products':prodType+'s')+' · '+perL;}
   const maxQ=filtered.length?Math.max(...filtered.map(t=>t.quantity)):1;
   const color=sellMode==='best'?'#96588a':'#c0607a';
   document.getElementById('storeTopBody').innerHTML=filtered.map(t=>`
@@ -1233,7 +1274,8 @@ function renderReport(){
 
   const woo=JSON.parse(localStorage.getItem('woo_data')||'null');
   const isRecent=(chosen.key==='current'||chosen.key==='w0');
-  const wk=(isRecent&&woo&&woo.periods&&woo.periods.week)?woo.periods.week:null;
+  const wk=(chosen.key==='current'&&woo&&woo.periods&&woo.periods.week)?woo.periods.week
+          :(chosen.key==='w0'&&woo&&woo.periods&&woo.periods.lastweek)?woo.periods.lastweek:null;
   const weekSales=wk?wk.totalSales:0, weekNet=wk?wk.netSales:0, weekOrders=wk?wk.totalOrders:0;
   const aov=weekOrders>0?weekNet/weekOrders:0;
 
@@ -1246,7 +1288,7 @@ function renderReport(){
   const campRevenue=weekCamps.reduce((s,c)=>s+(Number(c.revenue)||0),0);
   // Prefer WooCommerce's own attribution for the current week — Mailchimp's
   // figure over-credits campaigns and can be wildly inflated.
-  const storeEmailAttr=(isRecent&&woo&&woo.emailAttributed)?woo.emailAttributed:null;
+  const storeEmailAttr=(chosen.key==='current'&&woo&&woo.emailAttributed)?woo.emailAttributed:null;
   const topVid=[...weekVids].sort((a,b)=>b.views-a.views)[0];
 
   const wins=[], improves=[], next=[];
@@ -1284,7 +1326,7 @@ function renderReport(){
   // Best-performing rackets this week (from store data, category filtered)
   let topRackets=[];
   if(woo&&woo.topByPeriod){
-    const per=isRecent?'week':'week';
+    const per=chosen.key==='w0'?'lastweek':'week';
     const list=woo.topByPeriod[per]||[];
     const catMap=woo.catMap||{};
     const isRacketCat=s=>s==='padel-rackets'||s.endsWith('-padel-rackets');
