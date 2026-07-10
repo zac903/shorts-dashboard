@@ -777,14 +777,14 @@ async function fetchWoo(){
   try{
     let page=1, more=true;
     while(more && page<=10){
-      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories,status,stock_status,total_sales`);
+      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories,status,stock_status,stock_quantity,total_sales`);
       if(!prods||!prods.length){more=false;break;}
       for(const pr of prods){
         const slugs=(pr.categories||[]).map(c=>c.slug);
         catMap[pr.id]=slugs;
         // Catalogue snapshot for deadstock: live, in-stock products only
         if(pr.status==='publish'){
-          catalog.push({id:pr.id,name:pr.name,instock:pr.stock_status==='instock',lifetime:Number(pr.total_sales)||0});
+          catalog.push({id:pr.id,name:pr.name,instock:pr.stock_status==='instock',qty:(pr.stock_quantity==null?null:Number(pr.stock_quantity)),lifetime:Number(pr.total_sales)||0});
         }
       }
       if(prods.length<100)more=false;
@@ -1194,11 +1194,16 @@ function renderDeadstock(data){
   const from=(data.ranges&&data.ranges.lastweek)?data.ranges.lastweek.from:(data.ranges&&data.ranges.month?data.ranges.month.from:null);
   const fmtF=s=>s?new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'recently';
   let dead=catalog.filter(p=>p.instock&&!sold.has(p.id)&&matchesType({productId:p.id,name:p.name}));
-  dead.sort((a,b)=>b.lifetime-a.lifetime);
+  // Biggest piles of unsold stock first (untracked-qty items go last, then by lifetime)
+  dead.sort((a,b)=>{
+    const aq=a.qty==null?-1:a.qty, bq=b.qty==null?-1:b.qty;
+    if(bq!==aq)return bq-aq;
+    return b.lifetime-a.lifetime;
+  });
   if(label)label.textContent=`Deadstock · no sales since ${fmtF(from)} (${dead.length} in-stock products)`;
   document.getElementById('storeTopBody').innerHTML=dead.slice(0,25).map(p=>`
     <tr><td>${p.name}</td>
-    <td style="font-family:var(--mono);color:var(--muted2);">${fmt(p.lifetime)} lifetime</td></tr>`).join('')
+    <td style="font-family:var(--mono);"><span style="color:var(--text);font-weight:600;">${p.qty==null?'In stock':p.qty+' in stock'}</span><span style="color:var(--muted);"> · ${fmt(p.lifetime)} lifetime sold</span></td></tr>`).join('')
     ||'<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">Nothing flagged — everything in this category has sold recently.</td></tr>';
 }
 function renderStoreProducts(){
