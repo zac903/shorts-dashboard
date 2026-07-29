@@ -144,9 +144,8 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
     <div class="divider-line"></div>
 
     <div class="setup-section">
-      <div class="setup-section-label"><span class="nav-dot" style="background:#96588a;"></span> WooCommerce (store)</div>
-      <input class="api-input" type="password" id="wooCk" placeholder="Consumer key (ck_...)" autocomplete="off"/>
-      <input class="api-input" type="password" id="wooCs" placeholder="Consumer secret (cs_...)" autocomplete="off"/>
+      <div class="setup-section-label"><span class="nav-dot" style="background:#3d7eff;"></span> Shopify (store)</div>
+      <div style="font-size:13px;color:var(--muted);padding:4px 2px;">Connected automatically via the secure worker — no keys needed here.</div>
     </div>
 
     <button class="btn-load" onclick="setup()">Connect & load everything →</button>
@@ -174,7 +173,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
       <button class="nav-item" onclick="showPage('ytlong')"><span class="nav-dot" style="background:#cc0000;"></span> YouTube Videos</button>
       <button class="nav-item" onclick="setFilter('instagram',this)"><span class="nav-dot dot-ig"></span> Instagram Reels</button>
       <button class="nav-item" onclick="showPage('email')"><span class="nav-dot" style="background:#ffe01b;"></span> Email (Mailchimp)</button>
-      <button class="nav-item" onclick="showPage('store')"><span class="nav-dot" style="background:#96588a;"></span> Store (WooCommerce)</button>
+      <button class="nav-item" onclick="showPage('store')"><span class="nav-dot" style="background:#3d7eff;"></span> Store (Shopify)</button>
       <button class="nav-item" onclick="showPage('report')"><span class="nav-dot" style="background:#c8f04a;"></span> Weekly Report</button>
       <button class="nav-item" onclick="showPage('monthly')"><span class="nav-dot" style="background:#a78bfa;"></span> Monthly Trends</button>
       <div class="nav-section">Views</div>
@@ -261,16 +260,12 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
             <button class="filter-btn active" id="wooWeek" onclick="setWooPeriod('week',this)">This week</button>
             <button class="filter-btn" id="wooLastWeek" onclick="setWooPeriod('lastweek',this)">Last week</button>
             <button class="filter-btn" id="wooMonth" onclick="setWooPeriod('month',this)">This month</button>
-            <button class="filter-btn" id="wooYear" onclick="setWooPeriod('year',this)">This year</button>
+            <button class="filter-btn" id="wooLastMonth" onclick="setWooPeriod('lastmonth',this)">Last month</button>
           </div>
           <div class="metric-grid" id="storeMetrics"></div>
           <div class="chart-card">
-            <div class="chart-label">Sales over time</div>
+            <div class="chart-label">Net sales over time</div>
             <div style="position:relative;height:260px;"><canvas id="storeSalesChart"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-label">Orders per day</div>
-            <div style="position:relative;height:200px;"><canvas id="storeOrdersChart"></canvas></div>
           </div>
           <div class="chart-card" style="overflow-x:auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
@@ -278,7 +273,7 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
               <div style="display:flex;gap:6px;">
                 <button class="filter-btn active" id="sellBest" onclick="setSellMode('best',this)">Best sellers</button>
                 <button class="filter-btn" id="sellWorst" onclick="setSellMode('worst',this)">Worst sellers</button>
-                <button class="filter-btn" id="sellDead" onclick="setSellMode('dead',this)">Deadstock</button>
+                <button class="filter-btn" id="sellBrand" onclick="setSellMode('brand',this)">Rackets by brand</button>
               </div>
             </div>
             <div class="filter-bar" style="margin-bottom:1rem;">
@@ -288,7 +283,6 @@ body{font-family:var(--font);background:linear-gradient(180deg,#0a1733 0%,#08122
               <button class="filter-btn" onclick="setProdType('ball',this)">Balls</button>
               <button class="filter-btn" onclick="setProdType('shoe',this)">Shoes</button>
               <button class="filter-btn" onclick="setProdType('bag',this)">Bags</button>
-              <button class="filter-btn" onclick="setProdType('accessory',this)">Accessories</button>
             </div>
             <table class="video-table">
               <thead><tr><th>Product</th><th>Units sold</th></tr></thead>
@@ -404,8 +398,8 @@ const CHANNEL_ID = 'UCH6Y34ndSHpQ5chh0bk6Iqg';
 const IG_VERSION = 'v25.0';
 const MC_PROXY = 'https://mailchimp-proxy.epcoachscheme.workers.dev';
 const MC_DC = 'us7';
-const WOO_STORE = 'https://everythingpadel.co.uk';
-let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='', MC_KEY='', WOO_CK='', WOO_CS='';
+const SHOP_ENABLED = true; // Shopify store via client-credentials in the worker
+let YT_KEY='', IG_TOKEN='', IG_ACCOUNT='', MC_KEY='';
 let charts={};
 let sortCol='views', sortDir='desc', currentFilter='all', currentPage='overview', dateRange='all', wooPeriod='week', prodType='all', sellMode='best', ytlSort='recent', ovSort='recent';
 
@@ -470,14 +464,11 @@ async function setup(){
   const igToken=document.getElementById('igToken').value.trim();
   const igAccount=document.getElementById('igAccount').value.trim();
   const mcKey=document.getElementById('mcKey').value.trim();
-  const wooCk=document.getElementById('wooCk').value.trim();
-  const wooCs=document.getElementById('wooCs').value.trim();
-  if(!ytKey && !igToken && !mcKey && !wooCk){showErr('Enter at least one platform.');return;}
-  YT_KEY=ytKey; IG_TOKEN=igToken; IG_ACCOUNT=igAccount; MC_KEY=mcKey; WOO_CK=wooCk; WOO_CS=wooCs;
+  if(!ytKey && !igToken && !mcKey){showErr('Enter at least one platform.');return;}
+  YT_KEY=ytKey; IG_TOKEN=igToken; IG_ACCOUNT=igAccount; MC_KEY=mcKey;
   if(ytKey)localStorage.setItem('yt_key',ytKey);
   if(igToken){localStorage.setItem('ig_token',igToken);localStorage.setItem('ig_account',igAccount);}
   if(mcKey)localStorage.setItem('mc_key',mcKey);
-  if(wooCk){localStorage.setItem('woo_ck',wooCk);localStorage.setItem('woo_cs',wooCs);}
   document.getElementById('setupError').style.display='none';
   await refreshAll();
 }
@@ -487,8 +478,6 @@ async function refreshAll(){
   IG_TOKEN=IG_TOKEN||localStorage.getItem('ig_token')||'';
   IG_ACCOUNT=IG_ACCOUNT||localStorage.getItem('ig_account')||'';
   MC_KEY=MC_KEY||localStorage.getItem('mc_key')||'';
-  WOO_CK=WOO_CK||localStorage.getItem('woo_ck')||'';
-  WOO_CS=WOO_CS||localStorage.getItem('woo_cs')||'';
   show('loadingView');
   let errors=[];
   try{
@@ -499,7 +488,7 @@ async function refreshAll(){
     if(YT_KEY)tasks.push(fetchYT().catch(e=>errors.push('YouTube: '+e.message)));
     if(IG_TOKEN && IG_ACCOUNT)tasks.push(fetchIG().catch(e=>errors.push('Instagram: '+e.message)));
     if(MC_KEY)tasks.push(fetchMC().catch(e=>errors.push('Mailchimp: '+e.message)));
-    if(WOO_CK && WOO_CS)tasks.push(fetchWoo().catch(e=>errors.push('WooCommerce: '+e.message)));
+    if(SHOP_ENABLED)tasks.push(fetchWoo().catch(e=>errors.push('Shopify: '+e.message)));
     await Promise.all(tasks);
     document.getElementById('lastUpdated').textContent='Updated '+new Date().toLocaleTimeString();
     show('appView');
@@ -703,162 +692,147 @@ async function fetchMC(){
 }
 
 // ---- WOOCOMMERCE (via Cloudflare proxy) ----
-async function wooFetch(path,query){
-  let url=`${MC_PROXY}?service=woocommerce&store=${encodeURIComponent(WOO_STORE)}&path=${encodeURIComponent(path)}&ck=${encodeURIComponent(WOO_CK)}&cs=${encodeURIComponent(WOO_CS)}`;
-  if(query)url+=`&query=${encodeURIComponent(query)}`;
+// ---- SHOPIFY ----
+async function shopFetchPage(path, pageInfo){
+  let url=`${MC_PROXY}?service=shopify&path=${encodeURIComponent(path)}`;
+  if(pageInfo)url+=`&page_info=${encodeURIComponent(pageInfo)}`;
   const r=await fetchT(url,25000);
+  const next=r.headers.get('X-Next-Page')||'';
   const d=await r.json();
-  if(d.code&&d.message)throw new Error(d.message);
-  return d;
+  if(d.errors)throw new Error(typeof d.errors==='string'?d.errors:JSON.stringify(d.errors));
+  if(d.error)throw new Error(d.error);
+  return {data:d, next};
 }
-async function fetchWoo(){
+async function shopFetchOrders(fromISO, toISO, label){
+  let all=[];
+  const path=`orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(fromISO)}&created_at_max=${encodeURIComponent(toISO)}&fields=id,created_at,current_total_price,current_subtotal_price,current_total_tax,total_discounts,line_items,refunds,financial_status`;
+  let pageInfo='', pages=0;
+  do{
+    if(typeof setLoading==='function')setLoading(`Reading ${label||'store'} orders (${all.length})...`);
+    const {data,next}=await shopFetchPage(pageInfo?'orders.json':path, pageInfo);
+    all.push(...((data.orders)||[]));
+    pageInfo=next; pages++;
+  }while(pageInfo && pages<40);
+  return all;
+}
+// Build a product_id -> {type, vendor} map from the catalogue (for racket & brand filtering)
+async function shopFetchProductMap(){
+  const map={};
+  let pageInfo='', pages=0;
+  do{
+    const path='products.json?limit=250&fields=id,title,product_type,vendor,variants,status';
+    const {data,next}=await shopFetchPage(pageInfo?'products.json':path, pageInfo);
+    for(const pr of ((data.products)||[])){
+      map[pr.id]={type:pr.product_type||'',vendor:pr.vendor||'',title:pr.title||''};
+    }
+    pageInfo=next; pages++;
+  }while(pageInfo && pages<20);
+  return map;
+}
+async function fetchWoo(){  // (name kept for compatibility; now fetches Shopify)
   const nowD=new Date();
-  // "This week" = Friday-to-Friday: from the most recent Friday through today.
   const dsf=(nowD.getDay()-5+7)%7;
   const lastFri=new Date(nowD); lastFri.setDate(nowD.getDate()-dsf); lastFri.setHours(0,0,0,0);
-  // IMPORTANT: build date strings from LOCAL date parts. Using toISOString()
-  // converts to UTC, which in UK summer time shifted "Friday 00:00" back to
-  // Thursday — making the week start a day early and inflating totals.
   const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const isoT=d=>d.toISOString(); // Shopify wants full ISO datetimes for created_at filters
   const monthStart=new Date(nowD.getFullYear(),nowD.getMonth(),1);
   const yearStart=new Date(nowD.getFullYear(),0,1);
   const prevFri=new Date(lastFri); prevFri.setDate(lastFri.getDate()-7);
-  const lastWeekEnd=new Date(lastFri); lastWeekEnd.setDate(lastFri.getDate()-1);
+  const lastWeekEnd=new Date(lastFri); // exclusive upper bound = this week's Friday 00:00
+  const prevMonthStart=new Date(nowD.getFullYear(),nowD.getMonth()-1,1);
+  const prevMonthEnd=new Date(nowD.getFullYear(),nowD.getMonth(),1);
+
+  // Date windows. [from,to) — 'to' exclusive where it matters.
+  const windows={
+    week:{from:lastFri, to:nowD},
+    lastweek:{from:prevFri, to:lastWeekEnd},
+    month:{from:monthStart, to:nowD},
+    lastmonth:{from:prevMonthStart, to:prevMonthEnd}
+  };
   const ranges={
     week:{from:iso(lastFri),to:iso(nowD)},
     lastweek:{from:iso(prevFri),to:iso(lastWeekEnd)},
     month:{from:iso(monthStart),to:iso(nowD)},
-    year:{from:iso(yearStart),to:iso(nowD)}
+    lastmonth:{from:iso(prevMonthStart),to:iso(prevMonthEnd)}
   };
-  // Sales reports fetched in parallel with explicit date ranges (so we always
-  // know and can show exactly which dates each period covers).
-  const periodKeys=['week','lastweek','month','year'];
-  const periodResults=await Promise.all(periodKeys.map(p=>
-    wooFetch('reports/sales',`date_min=${ranges[p].from}&date_max=${ranges[p].to}`).catch(()=>null)));
-  const periods={}; periodKeys.forEach((p,i)=>periods[p]=periodResults[i]);
 
-  // Monthly sales history since January (for Monthly Trends)
+  // Product map first (type + vendor) — needed for racket & brand breakdowns.
+  let prodMap={};
+  try{ prodMap=await shopFetchProductMap(); }catch(e){}
+  const isRacket=pid=>{const p=prodMap[pid];return p&&/racket/i.test(p.type);};
+
+  // Aggregate one window's orders into all the metrics we need.
+  async function aggregate(win,label){
+    let orders=[];
+    try{ orders=await shopFetchOrders(isoT(win.from), isoT(win.to), label); }catch(e){ return null; }
+    let net=0, gross=0, tax=0, items=0, orderCount=0;
+    let refundValue=0, refundItems=0;
+    const bySeller={}, byBrand={}, dailyMap={};
+    const winStart=win.from.getTime(), winEnd=win.to.getTime();
+    for(const o of orders){
+      const created=new Date(o.created_at).getTime();
+      if(created<winStart||created>=winEnd) continue; // strict window
+      orderCount++;
+      const g=Number(o.current_total_price)||0;
+      const t=Number(o.current_total_tax)||0;
+      gross+=g; tax+=t; net+=(g-t);
+      const dkey=(o.created_at||'').slice(0,10);
+      dailyMap[dkey]=(dailyMap[dkey]||0)+(g-t);
+      for(const li of (o.line_items||[])){
+        const qty=Number(li.quantity)||0; items+=qty;
+        const pid=li.product_id;
+        const nm=li.title||li.name||'Item';
+        if(!bySeller[pid])bySeller[pid]={name:nm,productId:pid,quantity:0,racket:isRacket(pid)};
+        bySeller[pid].quantity+=qty;
+        if(isRacket(pid)){
+          const brand=(prodMap[pid]&&prodMap[pid].vendor)||'Unknown';
+          byBrand[brand]=(byBrand[brand]||0)+qty;
+        }
+      }
+      // Refunds processed within this window (reversals)
+      for(const rf of (o.refunds||[])){
+        const rc=new Date(rf.created_at||o.created_at).getTime();
+        if(rc<winStart||rc>=winEnd) continue;
+        for(const rli of (rf.refund_line_items||[])){
+          refundItems+=Number(rli.quantity)||0;
+          refundValue+=Number(rli.subtotal)||0;
+        }
+        for(const tx of (rf.transactions||[])){
+          // fallback if no line items: use transaction amount
+          if(!(rf.refund_line_items&&rf.refund_line_items.length)) refundValue+=Number(tx.amount)||0;
+        }
+      }
+    }
+    const daily=Object.entries(dailyMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([date,sales])=>({date,sales:+sales.toFixed(2)}));
+    const sellers=Object.values(bySeller).sort((a,b)=>b.quantity-a.quantity);
+    const rackets=sellers.filter(s=>s.racket);
+    const brands=Object.entries(byBrand).map(([brand,qty])=>({brand,qty})).sort((a,b)=>b.qty-a.qty);
+    return {
+      netSales:+net.toFixed(2), totalSales:+gross.toFixed(2), tax:+tax.toFixed(2),
+      totalOrders:orderCount, totalItems:items,
+      aov: orderCount? +(net/orderCount).toFixed(2) : 0,
+      refundValue:+refundValue.toFixed(2), refundItems,
+      sellers, rackets, brands, daily
+    };
+  }
+
+  const periods={};
+  for(const key of ['week','lastweek','month','lastmonth']){
+    periods[key]=await aggregate(windows[key], key);
+  }
+
+  // Monthly trends since January (net sales + orders per calendar month)
   const monthly=[];
-  const monthCalls=[];
-  const monthsBack=nowD.getMonth(); // Jan = index 0
-  for(let i=monthsBack;i>=0;i--){
-    const start=new Date(nowD.getFullYear(),nowD.getMonth()-i,1);
-    // Never request a future date_max — the legacy reports endpoint returns
-    // inflated figures for ranges that end in the future. Clamp the current
-    // month to today.
-    let end=new Date(nowD.getFullYear(),nowD.getMonth()-i+1,0);
-    if(end>nowD)end=new Date(nowD);
+  for(let m=0;m<=nowD.getMonth();m++){
+    const start=new Date(nowD.getFullYear(),m,1);
+    let end=new Date(nowD.getFullYear(),m+1,1);
+    if(end>nowD)end=nowD;
     const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
-    const dmin=iso(start), dmax=iso(end);
-    monthCalls.push(wooFetch('reports/sales',`date_min=${dmin}&date_max=${dmax}`)
-      .then(r=>{const s=(r&&r[0])||{};monthly.push({label,ym:dmin.slice(0,7),net:Number(s.net_sales)||0,total:Number(s.total_sales)||0,orders:Number(s.total_orders)||0});})
-      .catch(()=>{monthly.push({label,ym:dmin.slice(0,7),net:0,total:0,orders:0});}));
-  }
-  await Promise.all(monthCalls);
-  monthly.sort((a,b)=>a.ym.localeCompare(b.ym));
-  // Product -> category map. Fetch ALL statuses (publish, draft, private) so
-  // every product that could appear in sales gets categorised. Page up to 1000.
-  const catMap={};
-  const catalog=[];
-  try{
-    let page=1, more=true;
-    while(more && page<=10){
-      const prods=await wooFetch('products',`per_page=100&page=${page}&status=any&_fields=id,name,categories,status,stock_status,stock_quantity,total_sales`);
-      if(!prods||!prods.length){more=false;break;}
-      for(const pr of prods){
-        const slugs=(pr.categories||[]).map(c=>c.slug);
-        catMap[pr.id]=slugs;
-        // Catalogue snapshot for deadstock: live, in-stock products only
-        if(pr.status==='publish'){
-          catalog.push({id:pr.id,name:pr.name,instock:pr.stock_status==='instock',qty:(pr.stock_quantity==null?null:Number(pr.stock_quantity)),lifetime:Number(pr.total_sales)||0});
-        }
-      }
-      if(prods.length<100)more=false;
-      page++;
-    }
-  }catch(e){}
-
-  // Build per-product sales. Week & month from real orders (accurate);
-  // year from the top_sellers report (orders volume too high to page fully).
-  const cutoffs={
-    week:{after:lastFri},
-    lastweek:{after:prevFri,before:lastFri},
-    month:{after:new Date(nowD.getFullYear(),nowD.getMonth(),1)}
-  };
-  const pageCaps={week:8,lastweek:8,month:30}; // ~800/~800/~3000 orders headroom
-  const salesByPeriod={week:{},lastweek:{},month:{},year:{}};
-  // Store-attributed email revenue: WooCommerce records which orders arrived
-  // via a Mailchimp campaign (_wc_order_attribution_utm_source). This is far
-  // more honest than Mailchimp's own attribution, which credits campaigns with
-  // every later order a clicker places and can massively over-inflate.
-  const emailAttr={revenue:0,orders:0};
-
-  for(const per of ['week','lastweek','month']){
-    try{
-      let page=1, more=true;
-      while(more && page<=pageCaps[per]){
-        if(typeof setLoading==='function')setLoading(`Reading ${per} orders (page ${page})...`);
-        const flds='id,date_created,total,line_items'+(per==='week'?',meta_data':'');
-        const rangeQ=`after=${cutoffs[per].after.toISOString()}`+(cutoffs[per].before?`&before=${cutoffs[per].before.toISOString()}`:'');
-        const orders=await wooFetch('orders',`per_page=100&page=${page}&status=completed,processing&${rangeQ}&_fields=${flds}`);
-        if(!orders||!orders.length){more=false;break;}
-        for(const o of orders){
-          if(per==='week'&&Array.isArray(o.meta_data)){
-            const src=o.meta_data.find(m=>m.key==='_wc_order_attribution_utm_source');
-            if(src&&String(src.value).toLowerCase()==='mailchimp'){
-              emailAttr.revenue+=Number(o.total)||0; emailAttr.orders++;
-            }
-          }
-          for(const li of (o.line_items||[])){
-            const pid=li.product_id, qty=Number(li.quantity)||0, nm=li.name;
-            if(!salesByPeriod[per][pid])salesByPeriod[per][pid]={name:nm,productId:pid,quantity:0};
-            salesByPeriod[per][pid].quantity+=qty;
-          }
-        }
-        if(orders.length<100)more=false;
-        page++;
-      }
-    }catch(e){}
+    const agg=await aggregate({from:start,to:end}, label);
+    monthly.push({label, ym:iso(start).slice(0,7), net:agg?agg.netSales:0, total:agg?agg.totalSales:0, orders:agg?agg.totalOrders:0});
   }
 
-  // Year: use the top_sellers report (handles large ranges server-side)
-  try{
-    const ts=await wooFetch('reports/top_sellers','period=year');
-    for(const t of (ts||[])){
-      salesByPeriod.year[t.product_id]={name:t.name,productId:t.product_id,quantity:Number(t.quantity)||0};
-    }
-  }catch(e){}
-
-  const topByPeriod={};
-  for(const per of ['week','lastweek','month','year']){
-    topByPeriod[per]=Object.values(salesByPeriod[per]).sort((a,b)=>b.quantity-a.quantity);
-  }
-
-  const store={
-    periods:{},
-    topByPeriod:topByPeriod,
-    catMap:catMap,
-    monthly:monthly,
-    ranges:ranges,
-    emailAttributed:emailAttr,
-    catalog:catalog,
-    fetchedAt:new Date().toISOString()
-  };
-  for(const p of ['week','lastweek','month','year']){
-    const data=periods[p];
-    if(data&&data[0]){
-      const s=data[0];
-      const daily=s.totals?Object.entries(s.totals).map(([date,v])=>({date,sales:Number(v.sales)||0,orders:Number(v.orders)||0,items:Number(v.items)||0,customers:Number(v.customers)||0})):[];
-      store.periods[p]={
-        totalSales:Number(s.total_sales)||0,
-        netSales:Number(s.net_sales)||0,
-        totalOrders:Number(s.total_orders)||0,
-        totalItems:Number(s.total_items)||0,
-        totalCustomers:Number(s.total_customers)||0,
-        daily:daily
-      };
-    }
-  }
+  const store={ periods, monthly, ranges, prodMapCount:Object.keys(prodMap).length, fetchedAt:new Date().toISOString() };
   localStorage.setItem('woo_data',JSON.stringify(store));
 }
 function setFilter(f,el){
@@ -890,7 +864,7 @@ function showPage(p){
     const label=p==='email'?'Email':p==='store'?'Store':p==='report'?'Weekly Report':p==='monthly'?'Monthly Trends':'YouTube Videos';
     const nav=[...document.querySelectorAll('.nav-item')].find(n=>n.textContent.includes(label));
     if(nav)nav.classList.add('active');
-    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (WooCommerce)':p==='report'?'Weekly Report':p==='monthly'?'Monthly Trends':'YouTube Videos';
+    document.getElementById('topbarTitle').textContent=p==='email'?'Email (Mailchimp)':p==='store'?'Store (Shopify)':p==='report'?'Weekly Report':p==='monthly'?'Monthly Trends':'YouTube Videos';
   }
   const dateBar=document.querySelector('.date-bar');
   if(dateBar)dateBar.style.display=(p==='store'||p==='report'||p==='ytlong'||p==='monthly')?'none':'flex';
@@ -904,8 +878,8 @@ function openSettings(){
   if(t&&t.trim()){localStorage.setItem('ig_token',t.trim());IG_TOKEN=t.trim();alert('Token updated. Click Refresh to reload Instagram.');}
 }
 function logout(){
-  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','ig_insights','mc_key','mc_campaigns','followers_mailchimp','woo_ck','woo_cs','woo_data'].forEach(k=>localStorage.removeItem(k));
-  YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';WOO_CK='';WOO_CS='';
+  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','ig_insights','mc_key','mc_campaigns','followers_mailchimp','woo_data'].forEach(k=>localStorage.removeItem(k));
+  YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';
   Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
   show('setupView');
 }
@@ -1032,8 +1006,7 @@ function renderEmail(){
   const subs=latestFollowers('mailchimp');
   document.getElementById('emailMetrics').innerHTML=`
     <div class="metric-card"><div class="metric-label">Campaigns sent</div><div class="metric-value">${camps.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Email revenue this week</div><div class="metric-value c-green">${(()=>{const w=JSON.parse(localStorage.getItem('woo_data')||'null');const ea=w&&w.emailAttributed;return ea?money(ea.revenue):'—';})()}</div><div class="metric-sub">${(()=>{const w=JSON.parse(localStorage.getItem('woo_data')||'null');const ea=w&&w.emailAttributed;return ea?fmt(ea.orders)+' orders · store-attributed':'refresh to load';})()}</div></div>
-    <div class="metric-card"><div class="metric-label">Mailchimp-reported (all time)</div><div class="metric-value" style="color:var(--muted2);">${money(totalRevenue)}</div><div class="metric-sub">${fmt(totalOrders)} orders · generous attribution</div></div>
+    <div class="metric-card"><div class="metric-label">Mailchimp revenue (all time)</div><div class="metric-value c-green">${money(totalRevenue)}</div><div class="metric-sub">${fmt(totalOrders)} orders · Mailchimp attribution</div></div>
     <div class="metric-card"><div class="metric-label">Subscribers</div><div class="metric-value" style="color:#ffe01b;">${fmt(subs)}</div></div>
     <div class="metric-card"><div class="metric-label">Total emails sent</div><div class="metric-value c-blue">${fmt(totalSent)}</div></div>
     <div class="metric-card"><div class="metric-label">Avg open rate</div><div class="metric-value c-green">${avgOpen}%</div></div>
@@ -1055,140 +1028,94 @@ function renderEmail(){
 
 function setWooPeriod(p,el){
   wooPeriod=p;
-  document.querySelectorAll('#page-store .filter-btn.active').forEach(b=>{ if(b.id==='wooWeek'||b.id==='wooLastWeek'||b.id==='wooMonth'||b.id==='wooYear')b.classList.remove('active'); });
+  document.querySelectorAll('#page-store .filter-btn.active').forEach(b=>{ if(b.id==='wooWeek'||b.id==='wooLastWeek'||b.id==='wooMonth'||b.id==='wooLastMonth')b.classList.remove('active'); });
   el.classList.add('active');
   renderStore();
 }
 function setProdType(t,el){
   prodType=t;
-  // clear active only within the type row
   el.parentElement.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   renderStoreProducts();
 }
 function setSellMode(m,el){
   sellMode=m;
-  ['sellBest','sellWorst','sellDead'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
+  ['sellBest','sellWorst','sellBrand'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
   el.classList.add('active');
   renderStoreProducts();
 }
-// Map filter buttons to real WooCommerce category slugs
-const TYPE_SLUGS={
-  racket:['padel-rackets'],
-  ball:['padel-balls'],
-  shoe:['padel-shoes'],
-  bag:['padel-bags']
-};
-function matchesType(product){
-  if(prodType==='all')return true;
-  const data=JSON.parse(localStorage.getItem('woo_data')||'null');
-  const catMap=(data&&data.catMap)||{};
-  const slugs=catMap[product.productId];
-  if(!slugs||!slugs.length){
-    const n=(product.name||'').toLowerCase();
-    if(prodType==='racket')return n.includes('racket')||n.includes('racquet');
-    if(prodType==='ball')return n.includes('ball');
-    if(prodType==='shoe')return n.includes('shoe')||n.includes('trainer');
-    if(prodType==='bag')return n.includes('bag');
-    if(prodType==='accessory')return false;
-    return false;
-  }
-  // Match racket sub-categories precisely: they end in '-padel-rackets' (plural)
-  // or are exactly 'padel-rackets'. This excludes things like
-  // 'padel-racket-protector' which would otherwise match a loose contains check.
-  const isRacketCat=s=>s==='padel-rackets'||s.endsWith('-padel-rackets');
-  const isBallCat=s=>s==='padel-balls'||s.endsWith('-padel-balls');
-  const isShoeCat=s=>s==='padel-shoes'||s.endsWith('-padel-shoes');
-  const isBagCat=s=>s==='padel-bags'||s.endsWith('-padel-bags');
-  const isRacket=slugs.some(isRacketCat);
-  const isBall=slugs.some(isBallCat);
-  const isShoe=slugs.some(isShoeCat);
-  const isBag=slugs.some(isBagCat);
-  if(prodType==='racket')return isRacket;
-  if(prodType==='ball')return isBall;
-  if(prodType==='shoe')return isShoe;
-  if(prodType==='bag')return isBag;
-  if(prodType==='accessory')return !(isRacket||isBall||isShoe||isBag);
-  return false;
+const COMPARE_PAIR={week:'lastweek',lastweek:null,month:'lastmonth',lastmonth:null};
+function pctBadge(cur,prev){
+  if(prev==null||prev===0)return '';
+  const pct=((cur-prev)/prev)*100;
+  const cls=pct>=0?'eg':'er';
+  return `<span class="eng-badge ${cls}" style="margin-left:6px;">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
 }
 function renderStore(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
   if(!data||!data.periods){
-    document.getElementById('storeMetrics').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted);">No store data yet. Add your WooCommerce keys in Settings and click Refresh.</div>`;
+    document.getElementById('storeMetrics').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--muted);">No store data yet. Click Refresh to load Shopify data.</div>`;
     document.getElementById('storeTopBody').innerHTML='';
     return;
   }
-  const p=data.periods[wooPeriod]||{totalSales:0,netSales:0,totalOrders:0,totalItems:0,totalCustomers:0,daily:[]};
-  const aov=p.totalOrders>0?(p.totalSales/p.totalOrders):0;
-  // Explicit date range for the selected period (week = Friday to today)
+  const p=data.periods[wooPeriod]||{totalSales:0,netSales:0,totalOrders:0,totalItems:0,aov:0,refundValue:0,refundItems:0,daily:[]};
+  const cmpKey=COMPARE_PAIR[wooPeriod];
+  const cmp=cmpKey?data.periods[cmpKey]:null;
   const rg=(data.ranges&&data.ranges[wooPeriod])||null;
   const fmtR=s=>{const d=new Date(s);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});};
   const rangeLabel=rg?`${fmtR(rg.from)} – ${fmtR(rg.to)}`:('this '+wooPeriod);
-  const rangeNote=wooPeriod==='week'?' (Fri–Fri week)':wooPeriod==='lastweek'?' (completed Fri–Fri week)':'';
+  const noteMap={week:' (Fri–Fri, in progress)',lastweek:' (completed Fri–Fri week)',month:' (month to date)',lastmonth:' (full previous month)'};
+  const cmpNote=cmp?` · vs ${cmpKey==='lastweek'?'previous week':'previous month'}`:'';
   document.getElementById('storeMetrics').innerHTML=`
-    <div class="metric-card" style="grid-column:1/-1;padding:10px 16px;"><div style="font-size:13px;color:var(--muted2);">📅 Showing <strong style="color:var(--text);">${rangeLabel}</strong>${rangeNote}</div></div>
-    <div class="metric-card"><div class="metric-label">Total sales</div><div class="metric-value c-green">${money(p.totalSales)}</div><div class="metric-sub">${rangeLabel}</div></div>
-    <div class="metric-card"><div class="metric-label">Net sales</div><div class="metric-value c-blue">${money(p.netSales)}</div></div>
-    <div class="metric-card"><div class="metric-label">Orders</div><div class="metric-value">${fmt(p.totalOrders)}</div></div>
-    <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${money(aov)}</div></div>
-    <div class="metric-card"><div class="metric-label">Items sold</div><div class="metric-value c-yellow">${fmt(p.totalItems)}</div></div>
-    <div class="metric-card"><div class="metric-label">Customers</div><div class="metric-value" style="color:#96588a;">${fmt(p.totalCustomers)}</div></div>`;
+    <div class="metric-card" style="grid-column:1/-1;padding:10px 16px;"><div style="font-size:13px;color:var(--muted2);">📅 Showing <strong style="color:var(--text);">${rangeLabel}</strong>${noteMap[wooPeriod]||''}${cmpNote}</div></div>
+    <div class="metric-card"><div class="metric-label">Net sales</div><div class="metric-value c-green">${money(p.netSales)}${cmp?pctBadge(p.netSales,cmp.netSales):''}</div><div class="metric-sub">${money(p.totalSales)} gross</div></div>
+    <div class="metric-card"><div class="metric-label">Orders</div><div class="metric-value">${fmt(p.totalOrders)}${cmp?pctBadge(p.totalOrders,cmp.totalOrders):''}</div></div>
+    <div class="metric-card"><div class="metric-label">Avg order value</div><div class="metric-value c-purple">${money(p.aov)}${cmp?pctBadge(p.aov,cmp.aov):''}</div></div>
+    <div class="metric-card"><div class="metric-label">Items sold</div><div class="metric-value c-yellow">${fmt(p.totalItems)}${cmp?pctBadge(p.totalItems,cmp.totalItems):''}</div></div>
+    <div class="metric-card"><div class="metric-label">Sales reversals</div><div class="metric-value" style="color:#e0607a;">${money(p.refundValue||0)}</div><div class="metric-sub">${fmt(p.refundItems||0)} items returned</div></div>`;
   const daily=p.daily||[];
   const labels=daily.map(d=>d.date);
   mk('storeSalesChart','line',labels,daily.map(d=>+d.sales.toFixed(2)),'#4ade80',true);
-  mk('storeOrdersChart','bar',labels,daily.map(d=>d.orders),'#96588a');
+  if(charts['storeOrdersChart']){try{charts['storeOrdersChart'].destroy();}catch(e){}}
   renderStoreProducts();
-}
-// Deadstock = published, in-stock products with ZERO sales across all the real
-// order data we hold (current week + last Fri-Fri week + current month).
-// Sorted by lifetime units sold (desc) so formerly-good sellers gone cold
-// surface first — those are the ones costing you, vs brand-new arrivals.
-function renderDeadstock(data){
-  const catalog=data.catalog||[];
-  const label=document.getElementById('storeTopLabel');
-  if(!catalog.length){
-    if(label)label.textContent='Deadstock';
-    document.getElementById('storeTopBody').innerHTML='<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">Refresh to load catalogue data (deadstock needs the newest fetch).</td></tr>';
-    return;
-  }
-  const sold=new Set();
-  ['week','lastweek','month'].forEach(per=>((data.topByPeriod&&data.topByPeriod[per])||[]).forEach(p=>sold.add(p.productId)));
-  const from=(data.ranges&&data.ranges.lastweek)?data.ranges.lastweek.from:(data.ranges&&data.ranges.month?data.ranges.month.from:null);
-  const fmtF=s=>s?new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'recently';
-  let dead=catalog.filter(p=>p.instock&&!sold.has(p.id)&&matchesType({productId:p.id,name:p.name}));
-  // Biggest piles of unsold stock first (untracked-qty items go last, then by lifetime)
-  dead.sort((a,b)=>{
-    const aq=a.qty==null?-1:a.qty, bq=b.qty==null?-1:b.qty;
-    if(bq!==aq)return bq-aq;
-    return b.lifetime-a.lifetime;
-  });
-  if(label)label.textContent=`Deadstock · no sales since ${fmtF(from)} (${dead.length} in-stock products)`;
-  document.getElementById('storeTopBody').innerHTML=dead.slice(0,25).map(p=>`
-    <tr><td>${p.name}</td>
-    <td style="font-family:var(--mono);"><span style="color:var(--text);font-weight:600;">${p.qty==null?'In stock':p.qty+' in stock'}</span><span style="color:var(--muted);"> · ${fmt(p.lifetime)} lifetime sold</span></td></tr>`).join('')
-    ||'<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">Nothing flagged — everything in this category has sold recently.</td></tr>';
 }
 function renderStoreProducts(){
   const data=JSON.parse(localStorage.getItem('woo_data')||'null');
-  if(!data){return;}
-  if(sellMode==='dead'){renderDeadstock(data);return;}
-  const top=(data.topByPeriod&&data.topByPeriod[wooPeriod])||[];
-  let filtered=top.filter(t=>matchesType(t));
-  // sort best or worst
-  filtered=[...filtered].sort((a,b)=> sellMode==='best' ? b.quantity-a.quantity : a.quantity-b.quantity);
-  filtered=filtered.slice(0,15);
+  if(!data||!data.periods){return;}
+  const p=data.periods[wooPeriod];
+  if(!p){return;}
   const label=document.getElementById('storeTopLabel');
-  if(label){const perL={week:'this week',lastweek:'last week',month:'this month',year:'this year'}[wooPeriod]||wooPeriod;label.textContent=(sellMode==='best'?'Best':'Worst')+' selling '+(prodType==='all'?'products':prodType+'s')+' · '+perL;}
-  const maxQ=filtered.length?Math.max(...filtered.map(t=>t.quantity)):1;
-  const color=sellMode==='best'?'#96588a':'#c0607a';
-  document.getElementById('storeTopBody').innerHTML=filtered.map(t=>`
+  const perL={week:'this week',lastweek:'last week',month:'this month',lastmonth:'last month'}[wooPeriod]||wooPeriod;
+  const body=document.getElementById('storeTopBody');
+
+  if(sellMode==='brand'){
+    if(label)label.textContent=`Racket sales by brand · ${perL}`;
+    const brands=(p.brands||[]);
+    const maxQ=brands.length?Math.max(...brands.map(b=>b.qty)):1;
+    body.innerHTML=brands.map(b=>`
+      <tr><td>${b.brand}</td>
+      <td style="font-family:var(--mono);"><div style="display:flex;align-items:center;gap:10px;">
+        <span style="min-width:40px;">${fmt(b.qty)}</span>
+        <div style="flex:1;height:6px;border-radius:99px;background:var(--surface2);max-width:200px;"><div style="height:100%;width:${maxQ?(b.qty/maxQ*100).toFixed(0):0}%;background:#3d7eff;border-radius:99px;"></div></div>
+      </div></td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No racket sales for this period.</td></tr>`;
+    return;
+  }
+
+  let list = prodType==='racket' ? (p.rackets||[]) : (p.sellers||[]);
+  if(prodType!=='all' && prodType!=='racket'){
+    const kw={ball:'ball',shoe:'shoe',bag:'bag'}[prodType];
+    list = kw ? list.filter(s=>new RegExp(kw,'i').test(s.name)) : (p.sellers||[]);
+  }
+  list=[...list].sort((a,b)=> sellMode==='best' ? b.quantity-a.quantity : a.quantity-b.quantity).slice(0,15);
+  if(label)label.textContent=(sellMode==='best'?'Best':'Worst')+' selling '+(prodType==='all'?'products':prodType==='racket'?'rackets':prodType+'s')+' · '+perL;
+  const maxQ=list.length?Math.max(...list.map(t=>t.quantity)):1;
+  const color=sellMode==='best'?'#3d7eff':'#e0607a';
+  body.innerHTML=list.map(t=>`
     <tr><td>${t.name}</td>
-    <td style="font-family:var(--mono);">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="min-width:40px;">${fmt(t.quantity)}</span>
-        <div style="flex:1;height:6px;border-radius:99px;background:var(--surface2);max-width:200px;"><div style="height:100%;width:${maxQ?(t.quantity/maxQ*100).toFixed(0):0}%;background:${color};border-radius:99px;"></div></div>
-      </div>
-    </td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No ${prodType==='all'?'product':prodType} data for this period.</td></tr>`;
+    <td style="font-family:var(--mono);"><div style="display:flex;align-items:center;gap:10px;">
+      <span style="min-width:40px;">${fmt(t.quantity)}</span>
+      <div style="flex:1;height:6px;border-radius:99px;background:var(--surface2);max-width:200px;"><div style="height:100%;width:${maxQ?(t.quantity/maxQ*100).toFixed(0):0}%;background:${color};border-radius:99px;"></div></div>
+    </div></td></tr>`).join('')||`<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--muted);">No ${prodType==='all'?'product':prodType} data for this period.</td></tr>`;
 }
 
 function buildWeekOptions(){
@@ -1253,9 +1180,7 @@ function renderReport(){
   const camps=JSON.parse(localStorage.getItem('mc_campaigns')||'[]');
   const weekCamps=camps.filter(c=>{if(!c.sendTime)return false;const dt=new Date(c.sendTime);return dt>=wStart&&dt<wEnd;});
   const campRevenue=weekCamps.reduce((s,c)=>s+(Number(c.revenue)||0),0);
-  // Prefer WooCommerce's own attribution for the current week — Mailchimp's
-  // figure over-credits campaigns and can be wildly inflated.
-  const storeEmailAttr=(chosen.key==='current'&&woo&&woo.emailAttributed)?woo.emailAttributed:null;
+  const storeEmailAttr=null; // store-attributed email revenue not derived from Shopify order data
   const topVid=[...weekVids].sort((a,b)=>b.views-a.views)[0];
 
   const wins=[], improves=[], next=[];
@@ -1290,14 +1215,12 @@ function renderReport(){
   const lfWeek=longform.filter(v=>{if(!v.published)return false;const dt=new Date(v.published);return dt>=wStart&&dt<wEnd;}).sort((a,b)=>b.views-a.views);
   const lfViews=lfWeek.reduce((s,v)=>s+v.views,0);
 
-  // Best-performing rackets this week (from store data, category filtered)
+  // Best-performing rackets this week (from Shopify store data)
   let topRackets=[];
-  if(woo&&woo.topByPeriod){
+  if(woo&&woo.periods){
     const per=chosen.key==='w0'?'lastweek':'week';
-    const list=woo.topByPeriod[per]||[];
-    const catMap=woo.catMap||{};
-    const isRacketCat=s=>s==='padel-rackets'||s.endsWith('-padel-rackets');
-    topRackets=list.filter(p=>{const sl=catMap[p.productId];return sl&&sl.some(isRacketCat);}).sort((a,b)=>b.quantity-a.quantity).slice(0,10);
+    const pd=woo.periods[per];
+    if(pd&&pd.rackets)topRackets=[...pd.rackets].sort((a,b)=>b.quantity-a.quantity).slice(0,10);
   }
   const fmtShort=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
   const vidRow=v=>`<tr><td title="${v.title}">${v.title.length>42?v.title.slice(0,40)+'…':v.title}</td>
@@ -1490,15 +1413,14 @@ function fmt(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return
 function money(n){n=n||0;const s=n>=1000?(n/1000).toFixed(1)+'K':n.toFixed(0);return '£'+s;}
 
 (function init(){
-  const yk=localStorage.getItem('yt_key'),it=localStorage.getItem('ig_token'),mk=localStorage.getItem('mc_key'),wk=localStorage.getItem('woo_ck');
+  const yk=localStorage.getItem('yt_key'),it=localStorage.getItem('ig_token'),mk=localStorage.getItem('mc_key');
   const yv=localStorage.getItem('yt_videos'),iv=localStorage.getItem('ig_videos'),mv=localStorage.getItem('mc_campaigns'),wv=localStorage.getItem('woo_data');
   if(yk)YT_KEY=yk;if(it){IG_TOKEN=it;IG_ACCOUNT=localStorage.getItem('ig_account')||'';}if(mk)MC_KEY=mk;
-  if(wk){WOO_CK=wk;WOO_CS=localStorage.getItem('woo_cs')||'';}
-  if((yk||it||mk||wk)&&(yv||iv||mv||wv)){
+  if((yk||it||mk||SHOP_ENABLED)&&(yv||iv||mv||wv)){
     show('appView');
     document.getElementById('lastUpdated').textContent='Cached — click Refresh to update';
     renderAll();
-  }else if(yk||it||mk||wk){
+  }else if(yk||it||mk||SHOP_ENABLED){
     refreshAll();
   }
 })();
