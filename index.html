@@ -641,21 +641,22 @@ async function igMetric(mediaId, metric){
 
 // ---- MAILCHIMP (via Cloudflare proxy to avoid CORS) ----
 async function mcFetch(path){
-  const url=`${MC_PROXY}?path=${encodeURIComponent(path)}&dc=${MC_DC}&key=${encodeURIComponent(MC_KEY)}`;
-  const r=await fetchT(url,20000);
+  const url=`${MC_PROXY}?service=mailchimp&path=${encodeURIComponent(path)}&dc=${MC_DC}&key=${encodeURIComponent(MC_KEY)}`;
+  const r=await fetchT(url,45000);
   const d=await r.json();
   if(d.error||d.status==='error'||d.title)throw new Error(d.detail||d.title||d.error||'Mailchimp error');
   return d;
 }
 async function fetchMC(){
-  // Campaigns list (subject, send time, basic stats)
-  const camp=await mcFetch('campaigns?count=100&sort_field=send_time&sort_dir=DESC&status=sent');
+  // Campaigns list (subject, send time, basic stats). 60 covers well over a
+  // year of sends — pulling 100+ plus 200 reports was timing out.
+  const camp=await mcFetch('campaigns?count=60&sort_field=send_time&sort_dir=DESC&status=sent');
 
   // Reports endpoint carries the reliable ecommerce/revenue figures.
   // Build a lookup of campaign id -> revenue/orders so we can merge it in.
   let revMap={};
   try{
-    const rep=await mcFetch('reports?count=200');
+    const rep=await mcFetch('reports?count=60');
     for(const r of (rep.reports||[])){
       const ec=r.ecommerce||{};
       revMap[r.id]={
