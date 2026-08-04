@@ -648,27 +648,11 @@ async function mcFetch(path){
   return d;
 }
 async function fetchMC(){
-  // Campaigns list (subject, send time, basic stats). 60 covers well over a
-  // year of sends — pulling 100+ plus 200 reports was timing out.
-  const camp=await mcFetch('campaigns?count=60&sort_field=send_time&sort_dir=DESC&status=sent');
-
-  // Reports endpoint carries the reliable ecommerce/revenue figures.
-  // Build a lookup of campaign id -> revenue/orders so we can merge it in.
+  // Single lean call. The campaigns response already bundles report_summary
+  // (opens, clicks, ecommerce revenue) per campaign, so we don't need the
+  // separate heavy reports endpoint — that second call was the timeout cause.
+  const camp=await mcFetch('campaigns?count=60&sort_field=send_time&sort_dir=DESC&status=sent&fields=campaigns.id,campaigns.send_time,campaigns.emails_sent,campaigns.settings.subject_line,campaigns.settings.title,campaigns.report_summary');
   let revMap={};
-  try{
-    const rep=await mcFetch('reports?count=60');
-    for(const r of (rep.reports||[])){
-      const ec=r.ecommerce||{};
-      revMap[r.id]={
-        revenue: Number(ec.total_revenue)||0,
-        orders: Number(ec.total_orders)||0,
-        opens:(r.opens&&Number(r.opens.unique_opens))||0,
-        openRate:(r.opens&&r.opens.open_rate)?+(Number(r.opens.open_rate)*100).toFixed(1):0,
-        clicks:(r.clicks&&Number(r.clicks.unique_subscriber_clicks))||0,
-        clickRate:(r.clicks&&r.clicks.click_rate)?+(Number(r.clicks.click_rate)*100).toFixed(1):0
-      };
-    }
-  }catch(e){}
 
   const campaigns=(camp.campaigns||[]).map(c=>{
     const r=revMap[c.id]||{};
