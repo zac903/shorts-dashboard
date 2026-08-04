@@ -445,7 +445,13 @@ function applyDateRangeGeneric(items,dateField){
   if(dateRange==='all')return items;
   const now=new Date();
   let cutoff;
-  if(dateRange==='week'){cutoff=new Date(now);cutoff.setDate(now.getDate()-7);}
+  if(dateRange==='week'){
+    // Social weeks run Monday-to-Monday: from the most recent Monday 00:00 through now.
+    cutoff=new Date(now);
+    const daysSinceMon=(now.getDay()+6)%7; // Mon=0, Sun=6
+    cutoff.setDate(now.getDate()-daysSinceMon);
+    cutoff.setHours(0,0,0,0);
+  }
   else if(dateRange==='month'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-1);}
   else if(dateRange==='3months'){cutoff=new Date(now);cutoff.setMonth(now.getMonth()-3);}
   else if(dateRange==='year'){cutoff=new Date(now);cutoff.setFullYear(now.getFullYear()-1);}
@@ -715,6 +721,25 @@ async function shopFetchOrders(fromISO, toISO, label){
   }while(pageInfo && pages<40);
   return all;
 }
+// Lightweight: just totals for the monthly-trends chart. No line_items/refunds,
+// so each order is tiny and pages fly through. Uses Shopify's order count for speed.
+async function shopMonthTotals(fromISO, toISO, label){
+  let net=0, total=0, count=0;
+  const path=`orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(fromISO)}&created_at_max=${encodeURIComponent(toISO)}&fields=id,current_total_price,current_total_tax`;
+  let pageInfo='', pages=0;
+  do{
+    if(typeof setLoading==='function')setLoading(`Monthly trend: ${label} (${count})...`);
+    const {data,next}=await shopFetchPage(pageInfo?'orders.json':path, pageInfo);
+    const orders=(data.orders)||[];
+    for(const o of orders){
+      const gross=parseFloat(o.current_total_price)||0;
+      const tax=parseFloat(o.current_total_tax)||0;
+      net+=gross-tax; total+=gross; count++;
+    }
+    pageInfo=next; pages++;
+  }while(pageInfo && pages<40);
+  return {net, total, orders:count};
+}
 // Build a product_id -> {type, vendor} map from the catalogue (for racket & brand filtering)
 async function shopFetchProductMap(){
   const map={};
@@ -821,16 +846,34 @@ async function fetchWoo(){  // (name kept for compatibility; now fetches Shopify
     periods[key]=await aggregate(windows[key], key);
   }
 
-  // Monthly trends since January (net sales + orders per calendar month)
-  const monthly=[];
-  for(let m=0;m<=nowD.getMonth();m++){
-    const start=new Date(nowD.getFullYear(),m,1);
-    let end=new Date(nowD.getFullYear(),m+1,1);
-    if(end>nowD)end=nowD;
-    const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
-    const agg=await aggregate({from:start,to:end}, label);
-    monthly.push({label, ym:iso(start).slice(0,7), net:agg?agg.netSales:0, total:agg?agg.totalSales:0, orders:agg?agg.totalOrders:0});
+  // Monthly trends since January. Cached in localStorage and only rebuilt when
+  // we cross into a new month (or first run) — the heavy historical paging was
+  // the main cause of slow loads, and past months never change.
+  let monthly=[];
+  const thisYM=iso(monthStart).slice(0,7);
+  let cachedTrends=null;
+  try{ cachedTrends=JSON.parse(localStorage.getItem('shop_monthly')||'null'); }catch(e){}
+  if(cachedTrends && cachedTrends.builtFor===thisYM && Array.isArray(cachedTrends.monthly)){
+    // Reuse cached past months; only refresh the CURRENT month (which is still changing)
+    monthly=cachedTrends.monthly;
+    try{
+      const t=await shopMonthTotals(isoT(monthStart), isoT(nowD), 'this month');
+      const idx=monthly.findIndex(x=>x.ym===thisYM);
+      const cur={label:monthStart.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}), ym:thisYM, net:t.net, total:t.total, orders:t.orders};
+      if(idx>=0)monthly[idx]=cur; else monthly.push(cur);
+    }catch(e){}
+  }else{
+    for(let m=0;m<=nowD.getMonth();m++){
+      const start=new Date(nowD.getFullYear(),m,1);
+      let end=new Date(nowD.getFullYear(),m+1,1);
+      if(end>nowD)end=nowD;
+      const label=start.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+      let t={net:0,total:0,orders:0};
+      try{ t=await shopMonthTotals(isoT(start), isoT(end), label); }catch(e){}
+      monthly.push({label, ym:iso(start).slice(0,7), net:t.net, total:t.total, orders:t.orders});
+    }
   }
+  try{ localStorage.setItem('shop_monthly',JSON.stringify({builtFor:thisYM, monthly})); }catch(e){}
 
   const store={ periods, monthly, ranges, prodMapCount:Object.keys(prodMap).length, fetchedAt:new Date().toISOString() };
   localStorage.setItem('woo_data',JSON.stringify(store));
@@ -878,7 +921,7 @@ function openSettings(){
   if(t&&t.trim()){localStorage.setItem('ig_token',t.trim());IG_TOKEN=t.trim();alert('Token updated. Click Refresh to reload Instagram.');}
 }
 function logout(){
-  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','ig_insights','mc_key','mc_campaigns','followers_mailchimp','woo_data'].forEach(k=>localStorage.removeItem(k));
+  ['yt_key','yt_videos','yt_longform','ig_token','ig_account','ig_videos','ig_insights','mc_key','mc_campaigns','followers_mailchimp','woo_data','shop_monthly'].forEach(k=>localStorage.removeItem(k));
   YT_KEY='';IG_TOKEN='';IG_ACCOUNT='';MC_KEY='';
   Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
   show('setupView');
